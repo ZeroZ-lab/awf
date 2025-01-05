@@ -1,5 +1,5 @@
 import os
-import aiohttp
+import httpx
 import logging
 from typing import Dict, Any
 from .base import BaseProvider
@@ -36,8 +36,8 @@ class OpenRouterProvider(BaseProvider):
                 "Content-Type": "application/json"
             }
 
-            async with aiohttp.ClientSession() as session:
-                async with session.post(
+            async with httpx.AsyncClient() as client:
+                response = await client.post(
                     f"{self.api_base}/chat/completions",
                     headers=headers,
                     json={
@@ -47,13 +47,13 @@ class OpenRouterProvider(BaseProvider):
                         "temperature": kwargs.get("temperature", 0.7),
                         **{k:v for k,v in kwargs.items() if k not in ["max_tokens", "temperature"]}
                     }
-                ) as response:
-                    if response.status != 200:
-                        error_text = await response.text()
-                        raise Exception(f"OpenRouter API error: {response.status} - {error_text}")
-                    
-                    data = await response.json()
-                    return data["choices"][0]["message"]["content"].strip()
+                )
+                
+                if response.status_code != 200:
+                    raise Exception(f"OpenRouter API error: {response.status_code} - {response.text}")
+                
+                data = response.json()
+                return data["choices"][0]["message"]["content"].strip()
                     
         except Exception as e:
             error_msg = f"Error generating text with OpenRouter: {str(e)}"

@@ -29,7 +29,7 @@ echo 'source .venv/bin/activate' >> ~/.bashrc
 
 # 添加别名
 echo "alias dev='source .venv/bin/activate && uvicorn app.main:app --reload --port 8000'" >> ~/.bashrc
-echo "alias test='source .venv/bin/activate && pytest'" >> ~/.bashrc
+echo "alias test='source .venv/bin/activate && pytest tests/'" >> ~/.bashrc
 echo "alias prod='source .venv/bin/activate && uvicorn app.main:app --host 0.0.0.0 --port 8000'" >> ~/.bashrc
 echo "alias install='source .venv/bin/activate && uv pip install -e .[dev]'" >> ~/.bashrc
 
