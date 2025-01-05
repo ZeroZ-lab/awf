@@ -90,4 +90,4 @@ def load_models(models_file: str = None) -> Dict[str, BaseProvider]:
     return models
 
 # 初始化模型
-models = load_models("config/models.yaml") 
+models = load_models("app/instances/models.yaml") 

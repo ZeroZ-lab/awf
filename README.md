@@ -70,7 +70,7 @@ uvicorn app.main:app --host 0.0.0.0 --port 8000
 ## 配置文件
 
 ### 工作流配置
-位置：`config/workflows/*.yaml`
+位置：`app/instances/workflows/*.yaml`
 ```yaml
 workflow_id: example_workflow
 name: 示例工作流
@@ -82,7 +82,7 @@ steps:
 ```
 
 ### 模型配置
-位置：`config/models.yaml`
+位置：`app/instances/models.yaml`
 ```yaml
 models:
   - model_id: openrouter-deepseek
@@ -93,7 +93,7 @@ models:
 ```
 
 ### 工具配置
-位置：`config/tools.yaml`
+位置：`app/instances/tools.yaml`
 ```yaml
 tools:
   - name: SearchTool
@@ -106,12 +106,20 @@ tools:
 
 ### 执行工作流
 ```bash
-POST /api/v1/execute
+POST /api/v1/workflows/{workflow_id}/run
 Content-Type: application/json
 
 {
-    "workflow_id": "example_workflow",
     "input_text": "需要处理的内容"
+}
+```
+
+响应格式：
+```json
+{
+    "result": "处理结果",
+    "execution_time": 1.234,
+    "status": "success"
 }
 ```
 
@@ -123,26 +131,93 @@ GET /health
 ## 开发指南
 
 ### 添加新工具
-1. 在 `app/tools/` 创建新工具类
+1. 在 `app/services/tools/` 创建新工具类
 2. 继承 `BaseTool` 类
 3. 实现 `__call__` 方法
-4. 在 `config/tools.yaml` 注册工具
+4. 在 `app/instances/tools.yaml` 注册工具
 
 ### 添加新模型
 1. 在 `app/services/providers/` 创建新的 provider
 2. 实现必要的接口方法
-3. 在 `config/models.yaml` 添加配置
+3. 在 `app/instances/models.yaml` 添加配置
 
 ### 创建新工作流
-1. 在 `config/workflows/` 创建新的 YAML 文件
+1. 在 `app/instances/workflows/` 创建新的 YAML 文件
 2. 定义工作流步骤
 3. 支持的步骤类型：
-   - llm: 调用语言模型
-   - agent: 执行智能体
-   - workflow: 调用其他工作流
-   - parallel: 并行执行
-   - if: 条件分支
-   - foreach: 循环执行
+
+   - `llm`: 调用语言模型
+     ```yaml
+     - type: llm
+       model: openrouter-deepseek
+       prompt_template: "提示词模板"
+     ```
+
+   - `agent`: 执行智能体
+     ```yaml
+     - type: agent
+       agent_id: summary_agent
+       task: "任务描述"
+     ```
+
+   - `workflow`: 调用其他工作流
+     ```yaml
+     - type: workflow
+       workflow_id: nested_workflow
+     ```
+
+   - `parallel`: 并行执行多个步骤
+     ```yaml
+     - type: parallel
+       tasks:
+         - type: llm
+           model: openrouter-deepseek
+           prompt_template: "提示词1"
+         - type: agent
+           agent_id: summary_agent
+           task: "任务2"
+     ```
+
+   - `if`: 条件分支执行
+     ```yaml
+     - type: if
+       condition: "{data} > 100"
+       then:
+         - type: llm
+           model: openrouter-deepseek
+           prompt_template: "条件为真时执行"
+       else:
+         - type: agent
+           agent_id: summary_agent
+           task: "条件为假时执行"
+     ```
+
+   - `foreach`: 循环执行
+     ```yaml
+     - type: foreach
+       items: "{data_list}"
+       item_name: item
+       steps:
+         - type: llm
+           model: openrouter-deepseek
+           prompt_template: "处理当前项: {item}"
+     ```
+
+4. 错误处理配置（可选）：
+   ```yaml
+   - type: llm
+     model: openrouter-deepseek
+     prompt_template: "..."
+     error_handling:
+       retry:
+         times: 3
+         interval: 1
+       fallback:
+         steps:
+           - type: llm
+             model: openai-gpt-3.5-turbo-instruct
+             prompt_template: "备选方案"
+   ```
 
 ## 目录结构
 ```
@@ -151,14 +226,14 @@ app/
 ├── core/           # 核心功能
 ├── models/         # 数据模型
 ├── services/       # 服务层
-├── tools/          # 工具集
+│   ├── providers/  # 模型提供者
+│   └── tools/      # 工具实现类
+├── instances/      # 实例化配置
+│   ├── agents/     # Agent 实例配置
+│   ├── workflows/  # 工作流实例配置
+│   ├── models.yaml # 模型实例配置
+│   └── tools.yaml  # 工具实例配置
 └── main.py         # 入口文件
-
-config/
-├── agents/         # Agent 配置
-├── workflows/      # 工作流配置
-├── models.yaml     # 模型配置
-└── tools.yaml      # 工具配置
 
 tests/              # 测试文件
 ```

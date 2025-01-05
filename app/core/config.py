@@ -35,13 +35,13 @@ def load_config() -> Dict[str, Any]:
     }
     
     # 确保配置目录存在
-    os.makedirs("config/agents", exist_ok=True)
-    os.makedirs("config/workflows", exist_ok=True)
+    os.makedirs("app/instances/agents", exist_ok=True)
+    os.makedirs("app/instances/workflows", exist_ok=True)
     
-    config_dir = "config"
+    instances_dir = "app/instances"
     
     # 加载工具配置
-    tools_file = os.path.join(config_dir, "tools.yaml")
+    tools_file = os.path.join(instances_dir, "tools.yaml")
     if os.path.exists(tools_file):
         try:
             with open(tools_file, "r") as f:
@@ -52,7 +52,7 @@ def load_config() -> Dict[str, Any]:
             print(f"Error loading tools config: {e}")
 
     # 加载模型配置
-    models_file = os.path.join(config_dir, "models.yaml")
+    models_file = os.path.join(instances_dir, "models.yaml")
     if os.path.exists(models_file):
         try:
             with open(models_file, "r") as f:
@@ -63,7 +63,7 @@ def load_config() -> Dict[str, Any]:
             print(f"Error loading models config: {e}")
 
     # 加载 agents 配置
-    agents_dir = os.path.join(config_dir, "agents")
+    agents_dir = os.path.join(instances_dir, "agents")
     if os.path.exists(agents_dir):
         for filename in os.listdir(agents_dir):
             if filename.endswith(".yaml"):
@@ -76,7 +76,7 @@ def load_config() -> Dict[str, Any]:
                     print(f"Error loading agent config {filename}: {e}")
 
     # 加载 workflows 配置
-    workflows_dir = os.path.join(config_dir, "workflows")
+    workflows_dir = os.path.join(instances_dir, "workflows")
     if os.path.exists(workflows_dir):
         for filename in os.listdir(workflows_dir):
             if filename.endswith(".yaml"):

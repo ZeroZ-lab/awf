@@ -456,3 +456,35 @@
 2025-01-05 15:34:20,017 - app.services.workflow_executor - INFO - Processing step type: llm
 2025-01-05 15:34:20,017 - app.services.workflow_executor - INFO - Using LLM model: openrouter-deepseek
 2025-01-05 15:34:25,834 - app.services.workflow_executor - INFO - Step 2 completed. Output length: 328
+2025-01-05 15:44:45,304 - app.services.workflow_executor - INFO - Initializing workflow: summary_workflow
+2025-01-05 15:44:45,304 - app.services.workflow_executor - INFO - Executing workflow with 2 steps
+2025-01-05 15:44:45,305 - app.services.workflow_executor - INFO - Executing step 1/2: llm
+2025-01-05 15:44:45,305 - app.services.workflow_executor - INFO - Processing step type: llm
+2025-01-05 15:44:45,305 - app.services.workflow_executor - INFO - Using LLM model: openrouter-deepseek
+2025-01-05 15:44:48,534 - app.services.workflow_executor - INFO - Step 1 completed. Output length: 105
+2025-01-05 15:44:48,534 - app.services.workflow_executor - INFO - Executing step 2/2: llm
+2025-01-05 15:44:48,534 - app.services.workflow_executor - INFO - Processing step type: llm
+2025-01-05 15:44:48,534 - app.services.workflow_executor - INFO - Using LLM model: openrouter-deepseek
+2025-01-05 15:44:54,436 - app.services.workflow_executor - INFO - Step 2 completed. Output length: 327
+2025-01-05 15:49:34,775 - app.services.workflow_executor - INFO - Initializing workflow: summary_workflow
+2025-01-05 15:49:34,775 - app.services.workflow_executor - INFO - Executing workflow with 2 steps
+2025-01-05 15:49:34,775 - app.services.workflow_executor - INFO - Executing step 1/2: llm
+2025-01-05 15:49:34,775 - app.services.workflow_executor - INFO - Processing step type: llm
+2025-01-05 15:49:34,775 - app.services.workflow_executor - INFO - Using LLM model: openrouter-deepseek
+2025-01-05 15:49:34,775 - app.services.workflow_executor - ERROR - Error in step 1: Model not found: openrouter-deepseek
+2025-01-05 15:49:36,930 - app.services.workflow_executor - INFO - Initializing workflow: summary_workflow
+2025-01-05 15:49:36,930 - app.services.workflow_executor - INFO - Executing workflow with 2 steps
+2025-01-05 15:49:36,930 - app.services.workflow_executor - INFO - Executing step 1/2: llm
+2025-01-05 15:49:36,930 - app.services.workflow_executor - INFO - Processing step type: llm
+2025-01-05 15:49:36,930 - app.services.workflow_executor - INFO - Using LLM model: openrouter-deepseek
+2025-01-05 15:49:36,930 - app.services.workflow_executor - ERROR - Error in step 1: Model not found: openrouter-deepseek
+2025-01-05 15:50:35,401 - app.services.workflow_executor - INFO - Initializing workflow: summary_workflow
+2025-01-05 15:50:35,401 - app.services.workflow_executor - INFO - Executing workflow with 2 steps
+2025-01-05 15:50:35,401 - app.services.workflow_executor - INFO - Executing step 1/2: llm
+2025-01-05 15:50:35,401 - app.services.workflow_executor - INFO - Processing step type: llm
+2025-01-05 15:50:35,401 - app.services.workflow_executor - INFO - Using LLM model: openrouter-deepseek
+2025-01-05 15:50:38,462 - app.services.workflow_executor - INFO - Step 1 completed. Output length: 97
+2025-01-05 15:50:38,462 - app.services.workflow_executor - INFO - Executing step 2/2: llm
+2025-01-05 15:50:38,463 - app.services.workflow_executor - INFO - Processing step type: llm
+2025-01-05 15:50:38,463 - app.services.workflow_executor - INFO - Using LLM model: openrouter-deepseek
+2025-01-05 15:50:45,097 - app.services.workflow_executor - INFO - Step 2 completed. Output length: 460
