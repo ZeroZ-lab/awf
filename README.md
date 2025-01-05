@@ -150,7 +150,10 @@ source venv/bin/activate  # Linux/Mac
 .\venv\Scripts\activate  # Windows
 
 # 安装依赖
-uv pip install -e ".[dev]"
+pip install -e .
+
+# 安装开发依赖（可选）
+pip install pytest==8.3.4 pytest-asyncio==0.25.1 pytest-mock==3.14.0
 ```
 
 ### 2. 配置
@@ -216,7 +219,11 @@ POST /api/v1/workflows/{workflow_id}/run
 Content-Type: application/json
 
 {
-    "input_text": "需要处理的内容"
+    "input_text": "需要处理的内容",
+    "parameters": {
+        "max_length": 100
+    },
+    "mode": "sync"  # 支持 sync/async/stream 三种模式
 }
 ```
 
@@ -225,7 +232,7 @@ Content-Type: application/json
 {
     "result": "处理结果",
     "execution_time": 1.234,
-    "status": "success"
+    "status": "completed"
 }
 ```
 
@@ -249,100 +256,24 @@ GET /health
 
 ### 创建新工作流
 1. 在 `app/instances/workflows/` 创建新的 YAML 文件
-2. 定义工作流步骤
-3. 支持的步骤类型：
+2. 定义工作流结构和步骤
+3. 重启服务以加载新工作流
 
-   - `llm`: 调用语言模型
-     ```yaml
-     - type: llm
-       model: openrouter-deepseek
-       prompt_template: "提示词模板"
-     ```
+## 依赖版本
 
-   - `agent`: 执行智能体
-     ```yaml
-     - type: agent
-       agent_id: summary_agent
-       task: "任务描述"
-     ```
+主要依赖：
+- fastapi: 0.115.6
+- uvicorn: 0.34.0
+- pydantic: 2.10.4
+- httpx: 0.28.1
+- openai: 1.59.3
+- python-dotenv: 1.0.1
+- pyyaml: 6.0.2
 
-   - `workflow`: 调用其他工作流
-     ```yaml
-     - type: workflow
-       workflow_id: nested_workflow
-     ```
-
-   - `parallel`: 并行执行多个步骤
-     ```yaml
-     - type: parallel
-       tasks:
-         - type: llm
-           model: openrouter-deepseek
-           prompt_template: "提示词1"
-         - type: agent
-           agent_id: summary_agent
-           task: "任务2"
-     ```
-
-   - `if`: 条件分支执行
-     ```yaml
-     - type: if
-       condition: "{data} > 100"
-       then:
-         - type: llm
-           model: openrouter-deepseek
-           prompt_template: "条件为真时执行"
-       else:
-         - type: agent
-           agent_id: summary_agent
-           task: "条件为假时执行"
-     ```
-
-   - `foreach`: 循环执行
-     ```yaml
-     - type: foreach
-       items: "{data_list}"
-       item_name: item
-       steps:
-         - type: llm
-           model: openrouter-deepseek
-           prompt_template: "处理当前项: {item}"
-     ```
-
-4. 错误处理配置（可选）：
-   ```yaml
-   - type: llm
-     model: openrouter-deepseek
-     prompt_template: "..."
-     error_handling:
-       retry:
-         times: 3
-         interval: 1
-       fallback:
-         steps:
-           - type: llm
-             model: openai-gpt-3.5-turbo-instruct
-             prompt_template: "备选方案"
-   ```
-
-## 目录结构
-```
-app/
-├── api/            # API 接口
-├── core/           # 核心功能
-├── models/         # 数据模型
-├── services/       # 服务层
-│   ├── providers/  # 模型提供者
-│   └── tools/      # 工具实现类
-├── instances/      # 实例化配置
-│   ├── agents/     # Agent 实例配置
-│   ├── workflows/  # 工作流实例配置
-│   ├── models.yaml # 模型实例配置
-│   └── tools.yaml  # 工具实例配置
-└── main.py         # 入口文件
-
-tests/              # 测试文件
-```
+开发依赖：
+- pytest: 8.3.4
+- pytest-asyncio: 0.25.1
+- pytest-mock: 3.14.0
 
 ## 许可证
 
