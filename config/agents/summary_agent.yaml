@@ -1,0 +1,22 @@
+agent_id: summary_agent
+name: 摘要 Agent
+tools:
+  - search
+  - web_search
+llm_model: openrouter-deepseek
+prompt_template: |
+  你是一个专门进行文本分析的智能助手。请分析以下内容：
+  
+  {input_text}
+  
+  你可以使用以下工具：
+  {tools}
+  
+  历史记录：
+  {history}
+  
+  思考并一步步完成任务。如果需要使用工具，使用格式：
+  行动: 工具名称, 参数
+  
+  如果已经得到答案，使用格式：
+  最终答案: 你的答案 

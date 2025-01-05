@@ -1,0 +1,9 @@
+技术栈
+
+- 语言：Python
+- 框架：FastAPI
+- 模型：OpenAI
+- 配置：YAML
+- 测试：Pytest
+- 部署：Docker
+- python管理：uv

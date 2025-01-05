@@ -1,0 +1,40 @@
+workflow_id: summary_workflow
+name: 文章总结工作流
+steps:
+  - type: llm
+    model: openrouter-deepseek
+    prompt_template: |
+      请总结以下文章的主要内容:
+      
+      原文：
+      {input_text}
+      
+      要求：
+      1. 提供一个简洁但全面的总结
+      2. 突出文章的关键点
+      3. 保持客观性
+      4. 总结长度控制在200字以内
+      
+      上下文信息：
+      {context}
+      
+      请按照以上要求进行总结。
+
+  - type: llm
+    model: openrouter-deepseek
+    prompt_template: |
+      请对以下总结进行改进和优化：
+      
+      原始总结：
+      {input_text}
+      
+      要求：
+      1. 改善表达的流畅性
+      2. 确保逻辑连贯
+      3. 补充可能遗漏的重要信息
+      4. 使用更专业的表述
+      
+      上下文信息：
+      {context}
+      
+      请提供优化后的总结。

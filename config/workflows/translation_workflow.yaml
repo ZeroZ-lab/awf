@@ -1,0 +1,11 @@
+workflow_id: translation_workflow
+name: 翻译工作流
+steps:
+  - type: llm
+    model: openrouter-deepseek
+    prompt_template: |
+      请将以下内容翻译成英文：
+      
+      {input_text}
+      
+      请确保翻译准确且自然。 

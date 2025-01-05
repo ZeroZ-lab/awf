@@ -1,0 +1,13 @@
+tools:
+  - name: search
+    description: 搜索信息
+    class_name: SearchTool
+    module: app.tools.search
+  - name: web_search
+    description: 网络搜索
+    class_name: WebSearchTool
+    module: app.tools.search
+  - name: calculate
+    description: 数学计算
+    class_name: CalculateTool
+    module: app.tools.calculate 

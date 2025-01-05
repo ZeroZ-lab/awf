@@ -1,0 +1,31 @@
+models:
+  - model_id: openai-gpt-3.5-turbo-instruct
+    name: OpenAI GPT-3.5 Turbo Instruct
+    type: openai
+    params:
+      model_name: gpt-3.5-turbo-instruct
+      api_key_env: OPENAI_API_KEY
+
+  - model_id: openrouter-claude-2
+    name: Claude 2 via OpenRouter
+    type: openrouter
+    params:
+      model_name: anthropic/claude-2
+      api_key_env: OPENROUTER_API_KEY
+      api_base: https://openrouter.ai/api/v1
+
+  - model_id: openrouter-gpt-4
+    name: GPT-4 via OpenRouter
+    type: openrouter
+    params:
+      model_name: openai/gpt-4
+      api_key_env: OPENROUTER_API_KEY
+      api_base: https://openrouter.ai/api/v1
+
+  - model_id: openrouter-deepseek
+    name: Deepseek via OpenRouter
+    type: openrouter
+    params:
+      model_name: deepseek/deepseek-chat
+      api_key_env: OPENROUTER_API_KEY
+      api_base: https://openrouter.ai/api/v1 
