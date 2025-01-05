@@ -19,6 +19,7 @@ class BaseConditionExecutor(ABC):
             step_executor: 用于执行子步骤的执行器
         """
         self.step_executor = step_executor
+        self.input_text = None
 
     @abstractmethod
     async def execute(self, step: Dict[str, Any], input_text: str, context: Dict[str, Any]) -> str:
@@ -45,6 +46,11 @@ class BaseConditionExecutor(ABC):
             "sum": sum,
             **context
         }
+        
+        # Add input_text to context if available
+        if hasattr(self, 'input_text'):
+            safe_context['input_text'] = self.input_text
+            
         if extra_context:
             safe_context.update(extra_context)
         
@@ -54,98 +60,93 @@ class BaseConditionExecutor(ABC):
             logger.error(f"Error evaluating expression: {expr}")
             raise ValueError(f"Invalid expression: {str(e)}")
 
-    def _validate_condition(self, condition: str) -> bool:
-        """验证条件表达式的安全性"""
-        forbidden = ['import', 'exec', 'eval', '__', 'globals', 'locals', 'open']
-        return not any(word in condition for word in forbidden)
+    def _validate_condition(self, expr: str) -> bool:
+        """验证条件表达式是否安全"""
+        # 简单的安全检查，可以根据需要扩展
+        unsafe_patterns = [
+            "import",
+            "exec",
+            "eval(",
+            "compile",
+            "__",
+            "globals",
+            "locals",
+            "open"
+        ]
+        return not any(pattern in expr for pattern in unsafe_patterns)
+
+    async def _execute_steps(self, steps: List[Dict[str, Any]], input_text: str, context: Dict[str, Any]) -> Any:
+        """执行步骤序列"""
+        if not steps:
+            return input_text
+            
+        current = input_text
+        for step in steps:
+            if self.step_executor:
+                current = await self.step_executor(step, current)
+        return current
 
 class IfConditionExecutor(BaseConditionExecutor):
     """if 条件执行器"""
-    async def execute(self, step: Dict[str, Any], input_text: str, context: Dict[str, Any]) -> str:
-        # 格式化并计算条件表达式
-        condition = step["condition"].format(
-            input_text=input_text,
-            **context["parameters"]
-        )
+    async def execute(self, step: Dict[str, Any], input_text: str, context: Dict[str, Any]) -> Any:
+        """执行条件步骤"""
+        self.input_text = input_text  # Store input_text for evaluation
+        condition = step.get("condition")
+        if not condition:
+            raise ValueError("Condition is required for if step")
+
         condition_result = self._safe_eval(condition, context)
         
-        # 根据条件结果选择执行路径
         if condition_result:
-            sub_steps = step["then"]
+            return await self._execute_steps(step.get("then", []), input_text, context)
         else:
-            sub_steps = step.get("else", [])
-        
-        # 执行选中的步骤序列
-        current = input_text
-        for sub_step in sub_steps:
-            current = await self.step_executor(sub_step, current)
-        return current
+            return await self._execute_steps(step.get("else", []), input_text, context)
 
 class SwitchConditionExecutor(BaseConditionExecutor):
     """switch 条件执行器"""
-    async def execute(self, step: Dict[str, Any], input_text: str, context: Dict[str, Any]) -> str:
-        # 获取 switch 表达式的值
-        value_expr = step["value"].format(
-            input_text=input_text,
-            **context["parameters"]
-        )
+    async def execute(self, step: Dict[str, Any], input_text: str, context: Dict[str, Any]) -> Any:
+        """执行 switch 条件步骤"""
+        self.input_text = input_text  # Store input_text for evaluation
+        value_expr = step.get("value")
+        if not value_expr:
+            raise ValueError("Value expression is required for switch step")
+
         switch_value = self._safe_eval(value_expr, context)
-        
-        # 查找匹配的 case
-        cases = step["cases"]
-        default = step.get("default", [])
-        matched_steps = None
+        cases = step.get("cases", [])
         
         for case in cases:
             case_value = self._safe_eval(case["value"], context)
-            if switch_value == case_value:
-                matched_steps = case["steps"]
-                break
+            if str(switch_value) == str(case_value):
+                return await self._execute_steps(case.get("steps", []), input_text, context)
         
-        # 如果没有匹配的 case，使用 default
-        if matched_steps is None:
-            matched_steps = default
-        
-        # 执行匹配的步骤
-        current = input_text
-        for sub_step in matched_steps:
-            current = await self.step_executor(sub_step, current)
-        return current
+        # 如果没有匹配的 case，执行 default
+        return await self._execute_steps(step.get("default", []), input_text, context)
 
 class MatchConditionExecutor(BaseConditionExecutor):
     """match 条件执行器"""
-    async def execute(self, step: Dict[str, Any], input_text: str, context: Dict[str, Any]) -> str:
-        # 获取 match 表达式的值
-        value_expr = step["value"].format(
-            input_text=input_text,
-            **context["parameters"]
-        )
+    async def execute(self, step: Dict[str, Any], input_text: str, context: Dict[str, Any]) -> Any:
+        """执行 match 条件步骤"""
+        self.input_text = input_text  # Store input_text for evaluation
+        value_expr = step.get("value")
+        if not value_expr:
+            raise ValueError("Value expression is required for match step")
+
         match_value = self._safe_eval(value_expr, context)
+        conditions = step.get("conditions", [])
         
-        # 遍历所有条件直到找到匹配的
-        conditions = step["conditions"]
-        default = step.get("default", [])
-        matched_steps = None
+        # 添加 value 到上下文中用于条件判断
+        extra_context = {"value": match_value}
         
         for condition in conditions:
-            # 支持自定义比较逻辑
-            cond_expr = condition["when"].format(
-                value=match_value,
-                **context["parameters"]
-            )
-            if self._safe_eval(cond_expr, context, {"value": match_value}):
-                matched_steps = condition["steps"]
-                break
+            when_expr = condition.get("when")
+            if not when_expr:
+                continue
+                
+            if self._safe_eval(when_expr, context, extra_context):
+                return await self._execute_steps(condition.get("steps", []), input_text, context)
         
-        # 如果没有匹配的条件，使用 default
-        if matched_steps is None:
-            matched_steps = default
-        
-        # 执行匹配的步骤
-        current = input_text
-        for sub_step in matched_steps:
-            current = await self.step_executor(sub_step, current)
-        return current
+        # 如果没有匹配的条件，执行 default
+        return await self._execute_steps(step.get("default", []), input_text, context)
 
 class ConditionExecutorFactory:
     """条件执行器工厂"""

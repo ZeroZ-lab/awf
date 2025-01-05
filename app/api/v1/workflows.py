@@ -1,6 +1,6 @@
-from fastapi import APIRouter, HTTPException, BackgroundTasks, Query
+from fastapi import APIRouter, HTTPException, BackgroundTasks, Query, Response, status
 from fastapi.responses import StreamingResponse
-from pydantic import BaseModel
+from pydantic import BaseModel, validator
 from typing import Optional, Dict, Any, List, Literal
 from app.services.workflow_executor import WorkflowExecutor
 from app.core.config import config
@@ -26,6 +26,13 @@ class WorkflowRunRequest(BaseModel):
     input_text: str
     parameters: Optional[Dict[str, Any]] = None
     mode: Literal["sync", "async", "stream"] = "sync"  # 默认使用同步模式
+    
+    @validator("parameters")
+    def validate_parameters(cls, v):
+        if v is not None:
+            if "max_length" in v and not isinstance(v["max_length"], int):
+                raise ValueError("max_length must be an integer")
+        return v
 
 class WorkflowResponse(BaseModel):
     execution_id: Optional[str] = None
@@ -118,15 +125,16 @@ async def stream_generator(workflow_config: Dict[str, Any],
         async for step_result in executor.stream_execute(input_text, parameters):
             yield f"data: {json.dumps(step_result, ensure_ascii=False)}\n\n"
     except Exception as e:
-        yield f"data: {json.dumps({'error': str(e)}, ensure_ascii=False)}\n\n"
+        yield f"data: {json.dumps({'type': 'error', 'error': str(e)}, ensure_ascii=False)}\n\n"
     finally:
-        yield "data: [DONE]\n\n"
+        yield f"data: {json.dumps({'type': 'complete'}, ensure_ascii=False)}\n\n"
 
 @router.post("/{workflow_id}/run", response_model=WorkflowResponse)
 async def run_workflow(
     workflow_id: str, 
     request: WorkflowRunRequest,
-    background_tasks: BackgroundTasks
+    background_tasks: BackgroundTasks,
+    response: Response
 ):
     """运行工作流
     
@@ -155,7 +163,8 @@ async def run_workflow(
                 request.input_text,
                 request.parameters
             ),
-            media_type="text/event-stream"
+            media_type="text/event-stream",
+            headers={"Content-Type": "text/event-stream"}
         )
     
     elif request.mode == "sync":
@@ -205,6 +214,7 @@ async def run_workflow(
                 execution_id
             )
             
+            response.status_code = status.HTTP_202_ACCEPTED
             return WorkflowResponse(
                 execution_id=execution_id,
                 status=WorkflowStatus.PENDING,
@@ -222,49 +232,24 @@ async def run_workflow(
                 detail=str(e)
             )
 
-@router.get("/{workflow_id}/status", response_model=WorkflowStatusResponse)
-async def get_workflow_status(
-    workflow_id: str,
-    execution_id: Optional[str] = Query(None, description="特定执行ID的状态，如果不提供则返回最新执行的状态")
-):
+@router.get("/{workflow_id}/status/{execution_id}", response_model=WorkflowStatusResponse)
+async def get_workflow_status(workflow_id: str, execution_id: str):
     """获取工作流运行状态"""
-    if execution_id:
-        execution = running_workflows.get(execution_id)
-        if not execution or execution["workflow_id"] != workflow_id:
-            raise HTTPException(
-                status_code=404,
-                detail=f"Execution not found: {execution_id}"
-            )
-        latest_execution = execution
-    else:
-        # 查找最新的执行记录
-        latest_execution = None
-        latest_start_time = 0
-        
-        for exec_id, execution in running_workflows.items():
-            if (execution["workflow_id"] == workflow_id and 
-                execution["start_time"] > latest_start_time):
-                latest_execution = execution
-                latest_start_time = execution["start_time"]
-        
-        if not latest_execution:
-            raise HTTPException(
-                status_code=404,
-                detail=f"No execution found for workflow: {workflow_id}"
-            )
-    
-    execution_time = None
-    if latest_execution["status"] in [WorkflowStatus.COMPLETED, WorkflowStatus.FAILED]:
-        execution_time = time.time() - latest_execution["start_time"]
+    execution = running_workflows.get(execution_id)
+    if not execution or execution["workflow_id"] != workflow_id:
+        raise HTTPException(
+            status_code=404,
+            detail=f"Execution not found: {execution_id}"
+        )
     
     return WorkflowStatusResponse(
-        status=latest_execution["status"],
-        start_time=latest_execution["start_time"],
-        execution_time=execution_time,
-        error=latest_execution.get("error"),
-        result=latest_execution.get("result"),
-        current_step=latest_execution.get("current_step"),
-        total_steps=latest_execution.get("total_steps")
+        status=execution["status"],
+        current_step=execution.get("current_step"),
+        total_steps=execution.get("total_steps"),
+        start_time=execution.get("start_time"),
+        execution_time=execution.get("execution_time"),
+        error=execution.get("error"),
+        result=execution.get("result")
     )
 
 @router.post("/{workflow_id}/stop")
