@@ -1,7 +1,10 @@
 import os
-import requests
+import aiohttp
+import logging
 from typing import Dict, Any
 from .base import BaseProvider
+
+logger = logging.getLogger(__name__)
 
 class OpenRouterProvider(BaseProvider):
     def __init__(self, config):
@@ -12,31 +15,56 @@ class OpenRouterProvider(BaseProvider):
         self.model_name = config.params["model_name"]
         self.api_base = config.params.get("api_base", "https://openrouter.ai/api/v1")
 
-    def generate_text(self, prompt: str, **kwargs) -> str:
+    async def generate_text(self, prompt: str, **kwargs) -> str:
+        """异步生成文本
+
+        Args:
+            prompt: 提示词
+            **kwargs: 其他参数
+
+        Returns:
+            str: 生成的文本
+
+        Raises:
+            Exception: 如果API调用失败
+        """
         try:
             headers = {
                 "Authorization": f"Bearer {self.api_key}",
                 "HTTP-Referer": os.getenv("APP_URL", "http://localhost:8000"),
-                "X-Title": os.getenv("APP_NAME", "AI Workflow Service")
+                "X-Title": os.getenv("APP_NAME", "AI Workflow Service"),
+                "Content-Type": "application/json"
             }
 
-            response = requests.post(
-                f"{self.api_base}/chat/completions",
-                headers=headers,
-                json={
-                    "model": self.model_name,
-                    "messages": [{"role": "user", "content": prompt}],
-                    "max_tokens": kwargs.get("max_tokens", 1000),
-                    "temperature": kwargs.get("temperature", 0.7),
-                    **{k:v for k,v in kwargs.items() if k not in ["max_tokens", "temperature"]}
-                }
-            )
-            response.raise_for_status()
-            return response.json()["choices"][0]["message"]["content"].strip()
+            async with aiohttp.ClientSession() as session:
+                async with session.post(
+                    f"{self.api_base}/chat/completions",
+                    headers=headers,
+                    json={
+                        "model": self.model_name,
+                        "messages": [{"role": "user", "content": prompt}],
+                        "max_tokens": kwargs.get("max_tokens", 1000),
+                        "temperature": kwargs.get("temperature", 0.7),
+                        **{k:v for k,v in kwargs.items() if k not in ["max_tokens", "temperature"]}
+                    }
+                ) as response:
+                    if response.status != 200:
+                        error_text = await response.text()
+                        raise Exception(f"OpenRouter API error: {response.status} - {error_text}")
+                    
+                    data = await response.json()
+                    return data["choices"][0]["message"]["content"].strip()
+                    
         except Exception as e:
-            print(f"OpenRouter API error: {e}")
-            return f"Error generating text with OpenRouter: {str(e)}"
+            error_msg = f"Error generating text with OpenRouter: {str(e)}"
+            logger.error(error_msg)
+            raise Exception(error_msg)
 
     def validate_config(self) -> bool:
+        """验证配置
+
+        Returns:
+            bool: 配置是否有效
+        """
         required_params = ["api_key_env", "model_name"]
         return all(param in self.config.params for param in required_params) 

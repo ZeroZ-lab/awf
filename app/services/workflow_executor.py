@@ -1,10 +1,12 @@
 from typing import Dict, Any, List, Optional, AsyncGenerator
 from app.services.agent_executor import run_react_agent
 from app.services.model_manager import models
+from app.services.condition_executor import ConditionExecutorFactory
 from app.core.config import config
 import logging
 import json
 import time
+import asyncio
 
 logger = logging.getLogger(__name__)
 
@@ -18,6 +20,7 @@ class WorkflowExecutor:
             "parameters": None,
             "final_result": None
         }
+        self.condition_executor_factory = ConditionExecutorFactory(self._execute_step)
         logger.info(f"Initializing workflow: {workflow_config.get('workflow_id')}")
 
     async def execute(self, input_text: str, parameters: Optional[Dict[str, Any]] = None) -> str:
@@ -30,8 +33,13 @@ class WorkflowExecutor:
         Returns:
             str: 执行结果
         """
+        # 合并工作流默认参数和用户参数
+        default_params = self.workflow_config.get("parameters", {})
+        user_params = parameters or {}
+        merged_params = {**default_params, **user_params}
+        
         self.context["input"] = input_text
-        self.context["parameters"] = parameters or {}
+        self.context["parameters"] = merged_params
         current_input = input_text
         
         steps = self.workflow_config.get("steps", [])
@@ -75,8 +83,13 @@ class WorkflowExecutor:
         Yields:
             Dict[str, Any]: 包含执行状态和结果的字典
         """
+        # 合并工作流默认参数和用户参数
+        default_params = self.workflow_config.get("parameters", {})
+        user_params = parameters or {}
+        merged_params = {**default_params, **user_params}
+        
         self.context["input"] = input_text
-        self.context["parameters"] = parameters or {}
+        self.context["parameters"] = merged_params
         current_input = input_text
         
         steps = self.workflow_config.get("steps", [])
@@ -148,82 +161,72 @@ class WorkflowExecutor:
 
     async def _execute_step(self, step: Dict[str, Any], input_text: str) -> str:
         """执行单个步骤"""
-        step_type = step["type"]
-        logger.info(f"Processing step type: {step_type}")
+        step_type = step.get("type")
         
-        if step_type == "llm":
-            model_name = step["model"]
-            logger.info(f"Using LLM model: {model_name}")
-            model = models.get(model_name)
+        # 处理条件步骤
+        if step_type in ["if", "switch", "match"]:
+            executor = self.condition_executor_factory.get_executor(step_type)
+            return await executor.execute(step, input_text, self.context)
+        
+        # 处理 LLM 步骤
+        elif step_type == "llm":
+            model_id = step.get("model")
+            if not model_id:
+                raise ValueError("Model ID is required for llm step")
+            
+            model = models.get_model(model_id)
             if not model:
-                raise ValueError(f"Model not found: {model_name}")
+                raise ValueError(f"Model not found: {model_id}")
             
-            # 格式化提示词，支持参数替换
-            prompt = step["prompt_template"].format(
-                input_text=input_text,
-                context=self._get_context_for_prompt(),
-                **self.context["parameters"]
-            )
-            return model.generate_text(prompt)
-            
+            try:
+                # 格式化提示词，支持参数替换
+                format_args = {
+                    "input_text": input_text,
+                    **(self.context.get("parameters") or {})
+                }
+                prompt = step.get("prompt_template", "{input_text}").format(**format_args)
+                
+                # 获取其他 LLM 参数
+                temperature = step.get("temperature", 0.7)
+                max_tokens = step.get("max_tokens")
+                stop_sequences = step.get("stop_sequences", [])
+                
+                # 调用模型生成文本
+                result = await model.generate_text(
+                    prompt=prompt,
+                    temperature=temperature,
+                    max_tokens=max_tokens,
+                    stop_sequences=stop_sequences
+                )
+                
+                logger.info(f"Generated text length: {len(result)}")
+                return result
+                
+            except KeyError as e:
+                logger.error(f"Missing parameter in prompt template: {e}")
+                raise ValueError(f"Missing parameter in prompt template: {e}")
+            except Exception as e:
+                logger.error(f"Error generating text: {e}")
+                raise
+        
+        # 处理 agent 步骤
         elif step_type == "agent":
-            agent_id = step["agent_id"]
-            logger.info(f"Using Agent: {agent_id}")
-            agent_config = None
-            for agent in config.get("agents", []):
-                if agent["agent_id"] == agent_id:
-                    agent_config = agent
-                    break
-                    
-            if not agent_config:
-                raise ValueError(f"Agent not found: {agent_id}")
-                
-            # 格式化任务描述，支持参数替换
-            task = step.get("task", "").format(
-                input_text=input_text,
-                **self.context["parameters"]
-            )
-            return await run_react_agent(task, agent_config)
+            model_id = step.get("model")
+            if not model_id:
+                raise ValueError("Model ID is required for agent step")
             
-        elif step_type == "workflow":
-            workflow_id = step["workflow_id"]
-            logger.info(f"Using nested workflow: {workflow_id}")
-            workflow_config = None
-            for workflow in config.get("workflows", []):
-                if workflow["workflow_id"] == workflow_id:
-                    workflow_config = workflow
-                    break
-                    
-            if not workflow_config:
-                raise ValueError(f"Workflow not found: {workflow_id}")
-                
-            nested_workflow = WorkflowExecutor(workflow_config)
-            return await nested_workflow.execute(input_text, self.context["parameters"])
+            model = models.get_model(model_id)
+            if not model:
+                raise ValueError(f"Model not found: {model_id}")
+            
+            tools = step.get("tools", [])
+            return await run_react_agent(model, input_text, tools)
             
         else:
             raise ValueError(f"Unknown step type: {step_type}")
 
-    def _get_context_for_prompt(self) -> str:
-        """获取用于提示的上下文信息"""
-        context_info = {
-            "original_input": self.context["input"],
-            "parameters": self.context["parameters"],
-            "previous_steps": [
-                {
-                    "type": step["step_type"],
-                    "output": step["output"]
-                }
-                for step in self.context["steps_results"]
-            ]
-        }
-        return json.dumps(context_info, ensure_ascii=False, indent=2)
-
-    def _format_result(self, result: str) -> str:
-        """格式化最终结果"""
-        try:
-            # 如果结果是JSON字符串，尝试美化它
-            result_obj = json.loads(result)
-            return json.dumps(result_obj, ensure_ascii=False, indent=2)
-        except:
-            # 如果不是JSON，返回原始字符串
-            return result 
+    def _format_result(self, result: Any) -> str:
+        """格式化执行结果"""
+        if isinstance(result, (dict, list)):
+            return json.dumps(result, ensure_ascii=False)
+        return str(result) 

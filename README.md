@@ -9,10 +9,116 @@ AI Workflow Service 是一个灵活的 AI 工作流编排服务，支持多种 A
 - 支持嵌套工作流
 - 支持 Agent 作为工作流节点
 - 支持上下文传递和结果优化
-- 支持条件分支执行
+- 支持丰富的条件控制
+  - if-else 条件分支
+  - switch-case 分支
+  - match 模式匹配
 - 支持并行任务执行
 - 支持循环执行
 - 支持错误处理和重试机制
+
+### 条件执行示例
+
+#### 1. if-else 条件分支
+```yaml
+steps:
+  - type: if
+    condition: "len(input_text) > 100"  # 支持表达式
+    then:  # 条件为真时执行
+      - type: llm
+        model: openrouter-deepseek
+        prompt_template: "这是一段长文本，请总结：{input_text}"
+    else:  # 条件为假时执行
+      - type: llm
+        model: openrouter-deepseek
+        prompt_template: "这是一段短文本，请直接处理：{input_text}"
+```
+
+#### 2. switch-case 分支
+```yaml
+steps:
+  - type: switch
+    value: "status_code"  # 要匹配的值
+    cases:
+      - value: "200"
+        steps:
+          - type: llm
+            model: openrouter-deepseek
+            prompt_template: "处理成功响应：{input_text}"
+      - value: "404"
+        steps:
+          - type: llm
+            model: openrouter-deepseek
+            prompt_template: "处理未找到错误：{input_text}"
+    default:  # 默认情况
+      - type: llm
+        model: openrouter-deepseek
+        prompt_template: "处理其他情况：{input_text}"
+```
+
+#### 3. match 模式匹配
+```yaml
+steps:
+  - type: match
+    value: "response.status"
+    conditions:
+      - when: "value >= 200 and value < 300"
+        steps:
+          - type: llm
+            model: openrouter-deepseek
+            prompt_template: "处理成功响应：{input_text}"
+      - when: "value >= 400 and value < 500"
+        steps:
+          - type: llm
+            model: openrouter-deepseek
+            prompt_template: "处理客户端错误：{input_text}"
+    default:
+      - type: llm
+        model: openrouter-deepseek
+        prompt_template: "处理其他情况：{input_text}"
+```
+
+### 错误处理和重试
+```yaml
+steps:
+  - type: llm
+    model: openrouter-deepseek
+    prompt_template: "分析文本：{input_text}"
+    error_handling:
+      retry:
+        times: 3        # 最多重试3次（总共执行4次）
+        interval: 2     # 每次重试间隔2秒
+      fallback:         # 如果重试全部失败，执行这些备选步骤
+        steps:
+          - type: llm
+            model: openai-gpt-3.5-turbo-instruct
+            prompt_template: "使用备选模型分析：{input_text}"
+```
+
+### 并行执行
+```yaml
+steps:
+  - type: parallel
+    tasks:
+      - type: llm
+        model: openrouter-deepseek
+        prompt_template: "分析观点：{input_text}"
+      - type: llm
+        model: openai-gpt-3.5-turbo-instruct
+        prompt_template: "提取关键词：{input_text}"
+```
+
+### 循环执行
+```yaml
+steps:
+  - type: foreach
+    items: "{data_list}"    # 要遍历的数据列表
+    item_name: item         # 当前项在上下文中的变量名
+    steps:
+      - type: llm
+        model: openrouter-deepseek
+        prompt_template: "处理当前项：{item}"
+```
 
 ### AI 模型集成
 - 支持 OpenAI API

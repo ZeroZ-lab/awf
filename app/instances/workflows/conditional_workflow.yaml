@@ -1,0 +1,65 @@
+workflow_id: conditional_workflow
+description: 演示条件执行功能的工作流
+version: "1.0"
+
+parameters:
+  threshold: 0.8
+  language: "zh"
+  max_length: 100
+
+steps:
+  - type: if
+    description: "根据输入文本长度选择不同的处理路径"
+    condition: "len(input_text) > parameters['max_length']"
+    then:
+      - type: agent
+        description: "处理长文本"
+        model: openrouter-deepseek
+        tools:
+          - name: summarize
+            description: "生成文本摘要"
+    else:
+      - type: agent
+        description: "处理短文本"
+        model: openrouter-deepseek
+        tools:
+          - name: analyze
+            description: "分析文本内容"
+
+  - type: switch
+    description: "根据语言选择不同的处理模型"
+    value: "parameters['language']"
+    cases:
+      - value: "zh"
+        steps:
+          - type: agent
+            model: openrouter-deepseek
+            description: "使用中文模型处理"
+      - value: "en"
+        steps:
+          - type: agent
+            model: openrouter-deepseek
+            description: "使用英文模型处理"
+    default:
+      - type: agent
+        model: openrouter-deepseek
+        description: "使用默认模型处理"
+
+  - type: match
+    description: "根据文本内容特征选择处理方式"
+    value: "input_text"
+    conditions:
+      - when: "value.startswith('{')"
+        steps:
+          - type: agent
+            model: openrouter-deepseek
+            description: "处理 JSON 格式数据"
+      - when: "value.startswith('<')"
+        steps:
+          - type: agent
+            model: openrouter-deepseek
+            description: "处理 XML 格式数据"
+    default:
+      - type: agent
+        model: openrouter-deepseek
+        description: "处理纯文本数据" 

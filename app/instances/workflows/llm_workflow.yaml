@@ -1,0 +1,49 @@
+workflow_id: llm_workflow
+description: 演示 LLM 步骤功能的工作流
+version: "1.0"
+
+parameters:
+  language: "zh"
+  style: "professional"
+  max_length: 500
+
+steps:
+  - type: llm
+    description: "生成初始回复"
+    model: openrouter-deepseek
+    prompt_template: |
+      请用{style}的语气，使用{language}语言回复以下内容：
+      {input_text}
+    temperature: 0.7
+    max_tokens: 1000
+
+  - type: if
+    description: "根据生成文本长度决定是否需要总结"
+    condition: "len(input_text) > parameters['max_length']"
+    then:
+      - type: llm
+        description: "生成摘要"
+        model: openrouter-deepseek
+        prompt_template: |
+          请对以下内容进行总结，保持要点完整：
+          {input_text}
+        temperature: 0.3
+        max_tokens: 200
+    else:
+      - type: llm
+        description: "优化表达"
+        model: openrouter-deepseek
+        prompt_template: |
+          请优化以下内容的表达，使其更加清晰简洁：
+          {input_text}
+        temperature: 0.5
+        max_tokens: 300
+
+  - type: llm
+    description: "最终润色"
+    model: openrouter-deepseek
+    prompt_template: |
+      请对以下内容进行润色，确保语言流畅自然：
+      {input_text}
+    temperature: 0.4
+    max_tokens: 500 
