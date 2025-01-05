@@ -6,16 +6,18 @@ AI Workflow Service 是一个灵活的 AI 工作流编排服务，支持多种 A
 
 ### 工作流系统
 - 支持多步骤串行执行
-- 支持嵌套工作流
-- 支持 Agent 作为工作流节点
-- 支持上下文传递和结果优化
 - 支持丰富的条件控制
   - if-else 条件分支
   - switch-case 分支
   - match 模式匹配
-- 支持并行任务执行
-- 支持循环执行
 - 支持错误处理和重试机制
+- 支持上下文传递和结果优化
+
+即将推出的功能：
+- 并行任务执行
+- 循环执行
+- 嵌套工作流
+- Agent 作为工作流节点
 
 ### 条件执行示例
 
@@ -78,63 +80,17 @@ steps:
         prompt_template: "处理其他情况：{input_text}"
 ```
 
-### 错误处理和重试
-```yaml
-steps:
-  - type: llm
-    model: openrouter-deepseek
-    prompt_template: "分析文本：{input_text}"
-    error_handling:
-      retry:
-        times: 3        # 最多重试3次（总共执行4次）
-        interval: 2     # 每次重试间隔2秒
-      fallback:         # 如果重试全部失败，执行这些备选步骤
-        steps:
-          - type: llm
-            model: openai-gpt-3.5-turbo-instruct
-            prompt_template: "使用备选模型分析：{input_text}"
-```
-
-### 并行执行
-```yaml
-steps:
-  - type: parallel
-    tasks:
-      - type: llm
-        model: openrouter-deepseek
-        prompt_template: "分析观点：{input_text}"
-      - type: llm
-        model: openai-gpt-3.5-turbo-instruct
-        prompt_template: "提取关键词：{input_text}"
-```
-
-### 循环执行
-```yaml
-steps:
-  - type: foreach
-    items: "{data_list}"    # 要遍历的数据列表
-    item_name: item         # 当前项在上下文中的变量名
-    steps:
-      - type: llm
-        model: openrouter-deepseek
-        prompt_template: "处理当前项：{item}"
-```
-
 ### AI 模型集成
 - 支持 OpenAI API
 - 支持 OpenRouter API
-- 支持本地模型部署
 - 灵活的模型配置系统
 
 ### 工具系统
-- 内置搜索工具
-- 内置计算工具
-- 支持工作流作为工具
+- 支持自定义工具开发
 - 可扩展的工具注册机制
 
 ### 系统功能
 - 完整的日志记录
-- 性能监控
 - 配置验证
 - 错误处理
 - API 文档
@@ -176,6 +132,18 @@ uvicorn app.main:app --reload --port 8000
 uvicorn app.main:app --host 0.0.0.0 --port 8000
 ```
 
+### 4. 运行测试
+```bash
+# 运行所有测试
+pytest tests/
+
+# 运行特定测试文件
+pytest tests/test_api.py
+
+# 运行特定测试用例
+pytest tests/test_api.py::test_run_workflow
+```
+
 ## 配置文件
 
 ### 工作流配置
@@ -183,6 +151,8 @@ uvicorn app.main:app --host 0.0.0.0 --port 8000
 ```yaml
 workflow_id: example_workflow
 name: 示例工作流
+description: 工作流描述
+version: "1.0"
 steps:
   - type: llm
     model: openrouter-deepseek
@@ -199,6 +169,7 @@ models:
     type: openrouter
     params:
       model_name: deepseek-chat
+      api_key_env: OPENROUTER_API_KEY
 ```
 
 ### 工具配置
@@ -222,23 +193,53 @@ Content-Type: application/json
     "input_text": "需要处理的内容",
     "parameters": {
         "max_length": 100
-    },
-    "mode": "sync"  # 支持 sync/async/stream 三种模式
+    }
 }
 ```
 
 响应格式：
 ```json
 {
-    "result": "处理结果",
-    "execution_time": 1.234,
-    "status": "completed"
+    "result": "处理结果"
 }
+```
+
+响应状态码：
+- 200: 成功
+- 404: 工作流不存在
+- 422: 请求参数无效
+- 500: 服务器内部错误
+
+### 流式执行工作流
+```bash
+POST /api/v1/workflows/{workflow_id}/run/stream
+Content-Type: application/json
+
+{
+    "input_text": "需要处理的内容",
+    "parameters": {
+        "max_length": 100
+    }
+}
+```
+
+响应格式：
+```
+data: {"type": "step_start", "step": "生成初始回复", "timestamp": "..."}
+
+data: {"type": "step_complete", "step": "生成初始回复", "result": "...", "timestamp": "..."}
+
+data: {"type": "complete", "result": "最终结果", "timestamp": "..."}
 ```
 
 ### 健康检查
 ```bash
 GET /health
+
+响应：
+{
+    "status": "ok"
+}
 ```
 
 ## 开发指南
@@ -249,32 +250,9 @@ GET /health
 3. 实现 `__call__` 方法
 4. 在 `app/instances/tools.yaml` 注册工具
 
-### 添加新模型
-1. 在 `app/services/providers/` 创建新的 provider
-2. 实现必要的接口方法
-3. 在 `app/instances/models.yaml` 添加配置
-
-### 创建新工作流
-1. 在 `app/instances/workflows/` 创建新的 YAML 文件
-2. 定义工作流结构和步骤
-3. 重启服务以加载新工作流
-
-## 依赖版本
-
-主要依赖：
-- fastapi: 0.115.6
-- uvicorn: 0.34.0
-- pydantic: 2.10.4
-- httpx: 0.28.1
-- openai: 1.59.3
-- python-dotenv: 1.0.1
-- pyyaml: 6.0.2
-
-开发依赖：
-- pytest: 8.3.4
-- pytest-asyncio: 0.25.1
-- pytest-mock: 3.14.0
-
-## 许可证
-
-MIT License
+### 错误处理
+系统实现了多层错误处理机制：
+1. API 层：统一的错误响应格式
+2. 工作流层：步骤执行错误处理
+3. 模型层：API 调用重试和错误处理
+4. 配置层：配置验证和错误提示

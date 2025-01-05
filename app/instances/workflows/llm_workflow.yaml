@@ -1,4 +1,5 @@
 workflow_id: llm_workflow
+name: LLM 工作流
 description: 演示 LLM 步骤功能的工作流
 version: "1.0"
 

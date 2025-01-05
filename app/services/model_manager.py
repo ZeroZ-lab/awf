@@ -22,6 +22,16 @@ class ModelManager:
         self.models: Dict[str, BaseProvider] = {}
         self.load_models()
     
+    def register_model(self, model_id: str, model: BaseProvider) -> None:
+        """注册模型
+
+        Args:
+            model_id: 模型ID
+            model: 模型实例
+        """
+        self.models[model_id] = model
+        logger.info(f"Registered model: {model_id}")
+
     def get_model(self, model_id: str) -> Optional[BaseProvider]:
         """获取指定ID的模型
 

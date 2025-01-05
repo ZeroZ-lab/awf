@@ -73,8 +73,8 @@ def complex_workflow_config():
 @pytest.fixture
 def mock_model(mocker):
     """创建模拟模型"""
-    async def mock_generate_text(*args, **kwargs):
-        return "Mocked response for: " + kwargs.get("prompt", "")
+    async def mock_generate_text(prompt: str, **kwargs):
+        return f"Mocked response for: {prompt}"
     
     model = mocker.AsyncMock()
     model.generate_text.side_effect = mock_generate_text

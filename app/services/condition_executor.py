@@ -162,4 +162,22 @@ class ConditionExecutorFactory:
         executor = self.executors.get(step_type)
         if not executor:
             raise ValueError(f"Unknown condition type: {step_type}")
-        return executor 
+        return executor
+
+    async def execute(self, step: Dict[str, Any], input_text: str, context: Dict[str, Any]) -> str:
+        """执行条件步骤
+        
+        Args:
+            step: 步骤配置
+            input_text: 输入文本
+            context: 上下文
+            
+        Returns:
+            str: 执行结果
+        """
+        step_type = step.get("type")
+        if not step_type:
+            raise ValueError("Step type is required")
+            
+        executor = self.get_executor(step_type)
+        return await executor.execute(step, input_text, context) 

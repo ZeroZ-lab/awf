@@ -1,318 +1,98 @@
-from fastapi import APIRouter, HTTPException, BackgroundTasks, Query, Response, status
+from fastapi import APIRouter, HTTPException, BackgroundTasks
 from fastapi.responses import StreamingResponse
 from pydantic import BaseModel, validator
-from typing import Optional, Dict, Any, List, Literal
+from typing import Dict, Any, Optional
 from app.services.workflow_executor import WorkflowExecutor
-from app.core.config import config
-import time
-import uuid
-import asyncio
-from enum import Enum
+from app.core.config import load_config, DEFAULT_WORKFLOWS_DIR, DEFAULT_MODELS_FILE, DEFAULT_TOOLS_FILE
+import logging
 import json
+import asyncio
+from datetime import datetime
+import os
 
-router = APIRouter(prefix="/api/v1/workflows", tags=["workflows"])
+router = APIRouter()
+logger = logging.getLogger(__name__)
 
-# 存储运行中的工作流
-running_workflows: Dict[str, Dict[str, Any]] = {}
-
-class WorkflowStatus(str, Enum):
-    PENDING = "pending"
-    RUNNING = "running"
-    COMPLETED = "completed"
-    FAILED = "failed"
-    STOPPED = "stopped"
-
-class WorkflowRunRequest(BaseModel):
+class WorkflowRequest(BaseModel):
+    workflow_id: str
     input_text: str
     parameters: Optional[Dict[str, Any]] = None
-    mode: Literal["sync", "async", "stream"] = "sync"  # 默认使用同步模式
     
     @validator("parameters")
     def validate_parameters(cls, v):
-        if v is not None:
-            if "max_length" in v and not isinstance(v["max_length"], int):
-                raise ValueError("max_length must be an integer")
+        if v is None:
+            return {}
         return v
 
-class WorkflowResponse(BaseModel):
-    execution_id: Optional[str] = None
-    result: Optional[str] = None
-    execution_time: Optional[float] = None
-    status: str
-    error: Optional[str] = None
-
-class WorkflowInfo(BaseModel):
-    workflow_id: str
-    name: str
-    description: Optional[str] = None
-    steps: List[Dict[str, Any]]
-
-class WorkflowStatusResponse(BaseModel):
-    status: str
-    current_step: Optional[int] = None
-    total_steps: Optional[int] = None
-    start_time: Optional[float] = None
-    execution_time: Optional[float] = None
-    error: Optional[str] = None
-    result: Optional[str] = None
-
-class WorkflowResult(BaseModel):
-    """工作流执行结果"""
-    execution_id: str
-    workflow_id: str
-    status: str
-    result: Optional[str] = None
-    execution_time: Optional[float] = None
-    error: Optional[str] = None
-    start_time: float
-
-@router.get("/{workflow_id}", response_model=WorkflowInfo)
-async def get_workflow(workflow_id: str):
-    """获取工作流信息"""
-    workflow = None
-    for wf in config.get("workflows", []):
-        if wf.get("workflow_id") == workflow_id:
-            workflow = wf
-            break
-    
-    if not workflow:
-        raise HTTPException(
-            status_code=404,
-            detail=f"Workflow not found: {workflow_id}"
-        )
-    
-    return WorkflowInfo(
-        workflow_id=workflow["workflow_id"],
-        name=workflow.get("name", "Unnamed Workflow"),
-        description=workflow.get("description"),
-        steps=workflow.get("steps", [])
-    )
-
-async def _execute_workflow(workflow_config: Dict[str, Any], 
-                          input_text: str,
-                          parameters: Optional[Dict[str, Any]],
-                          execution_id: str):
-    """在后台执行工作流"""
+def get_workflow_config(workflow_id: str) -> Dict[str, Any]:
+    """获取工作流配置"""
     try:
-        running_workflows[execution_id]["status"] = WorkflowStatus.RUNNING
-        executor = WorkflowExecutor(workflow_config)
-        result = await executor.execute(input_text, parameters)
+        # 先检查工作流文件是否存在
+        workflow_path = os.path.join(DEFAULT_WORKFLOWS_DIR, f"{workflow_id}.yaml")
+        if not os.path.exists(workflow_path):
+            raise HTTPException(status_code=404, detail=f"Workflow not found: {workflow_id}")
+            
+        config = load_config(DEFAULT_WORKFLOWS_DIR, DEFAULT_MODELS_FILE, DEFAULT_TOOLS_FILE)
+        if not config["workflows"]:
+            raise HTTPException(status_code=404, detail="No workflows found")
+            
+        workflows = {w["workflow_id"]: w for w in config["workflows"]}
+        if workflow_id not in workflows:
+            raise HTTPException(status_code=404, detail=f"Workflow not found: {workflow_id}")
         
-        execution_time = time.time() - running_workflows[execution_id]["start_time"]
-        running_workflows[execution_id].update({
-            "status": WorkflowStatus.COMPLETED,
-            "result": result,
-            "execution_time": execution_time,
-            "current_step": len(workflow_config.get("steps", [])),
-            "total_steps": len(workflow_config.get("steps", []))
-        })
-        return result
-    except Exception as e:
-        error_msg = str(e)
-        running_workflows[execution_id].update({
-            "status": WorkflowStatus.FAILED,
-            "error": error_msg,
-            "result": None
-        })
+        return workflows[workflow_id]
+    except HTTPException:
         raise
-
-async def stream_generator(workflow_config: Dict[str, Any],
-                         input_text: str,
-                         parameters: Optional[Dict[str, Any]]):
-    """生成流式执行结果"""
-    try:
-        executor = WorkflowExecutor(workflow_config)
-        async for step_result in executor.stream_execute(input_text, parameters):
-            yield f"data: {json.dumps(step_result, ensure_ascii=False)}\n\n"
     except Exception as e:
-        yield f"data: {json.dumps({'type': 'error', 'error': str(e)}, ensure_ascii=False)}\n\n"
-    finally:
-        yield f"data: {json.dumps({'type': 'complete'}, ensure_ascii=False)}\n\n"
+        logger.error(f"Unexpected error: {str(e)}")
+        raise HTTPException(status_code=500, detail=str(e))
 
-@router.post("/{workflow_id}/run", response_model=WorkflowResponse)
-async def run_workflow(
-    workflow_id: str, 
-    request: WorkflowRunRequest,
-    background_tasks: BackgroundTasks,
-    response: Response
-):
-    """运行工作流
-    
-    支持三种执行模式：
-    - sync: 同步执行，等待完成后返回结果
-    - async: 异步执行，立即返回执行ID，通过status接口查询结果
-    - stream: 流式执行，实时返回执行过程和结果
+@router.post("/workflows/{workflow_id}/run")
+async def run_workflow(workflow_id: str, request: WorkflowRequest):
     """
-    workflow_config = None
-    for workflow in config.get("workflows", []):
-        if workflow.get("workflow_id") == workflow_id:
-            workflow_config = workflow
-            break
+    运行工作流
+    """
+    workflow_config = get_workflow_config(workflow_id)
+    executor = WorkflowExecutor(workflow_config)
     
-    if not workflow_config:
-        raise HTTPException(
-            status_code=404,
-            detail=f"Workflow not found: {workflow_id}"
-        )
+    try:
+        result = await executor.execute(request.input_text, request.parameters)
+        return {"result": result}
+    except Exception as e:
+        logger.error(f"Error executing workflow: {str(e)}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+@router.post("/workflows/{workflow_id}/run/stream")
+async def run_workflow_stream(workflow_id: str, request: WorkflowRequest):
+    """
+    流式运行工作流
+    """
+    workflow_config = get_workflow_config(workflow_id)
+    executor = WorkflowExecutor(workflow_config)
     
-    # 根据执行模式处理
-    if request.mode == "stream":
-        return StreamingResponse(
-            stream_generator(
-                workflow_config,
-                request.input_text,
-                request.parameters
-            ),
-            media_type="text/event-stream",
-            headers={"Content-Type": "text/event-stream"}
-        )
-    
-    elif request.mode == "sync":
+    async def generate():
         try:
-            start_time = time.time()
-            executor = WorkflowExecutor(workflow_config)
-            result = await executor.execute(
-                request.input_text,
-                request.parameters
-            )
-            execution_time = time.time() - start_time
-            
-            return WorkflowResponse(
-                result=result,
-                execution_time=execution_time,
-                status=WorkflowStatus.COMPLETED
-            )
+            async for event in executor.stream_execute(request.input_text, request.parameters):
+                if event["type"] == "complete":
+                    yield f"data: {json.dumps(event)}\n\n"
+                    break
+                yield f"data: {json.dumps(event)}\n\n"
         except Exception as e:
-            raise HTTPException(
-                status_code=500,
-                detail=str(e)
-            )
+            logger.error(f"Error executing workflow: {str(e)}")
+            error_event = {
+                "type": "error",
+                "error": str(e),
+                "timestamp": datetime.now().isoformat()
+            }
+            yield f"data: {json.dumps(error_event)}\n\n"
     
-    else:  # async mode
-        execution_id = str(uuid.uuid4())
-        total_steps = len(workflow_config.get("steps", []))
-        
-        # 初始化执行状态
-        running_workflows[execution_id] = {
-            "workflow_id": workflow_id,
-            "status": WorkflowStatus.PENDING,
-            "start_time": time.time(),
-            "input_text": request.input_text,
-            "parameters": request.parameters,
-            "current_step": 0,
-            "total_steps": total_steps,
-            "result": None
+    return StreamingResponse(
+        generate(),
+        media_type="text/event-stream",
+        headers={
+            "Cache-Control": "no-cache",
+            "Connection": "keep-alive",
+            "X-Accel-Buffering": "no",
+            "Content-Type": "text/event-stream"
         }
-        
-        try:
-            # 在后台执行工作流
-            background_tasks.add_task(
-                _execute_workflow,
-                workflow_config,
-                request.input_text,
-                request.parameters,
-                execution_id
-            )
-            
-            response.status_code = status.HTTP_202_ACCEPTED
-            return WorkflowResponse(
-                execution_id=execution_id,
-                status=WorkflowStatus.PENDING,
-                execution_time=0,
-                result=None
-            )
-            
-        except Exception as e:
-            running_workflows[execution_id].update({
-                "status": WorkflowStatus.FAILED,
-                "error": str(e)
-            })
-            raise HTTPException(
-                status_code=500,
-                detail=str(e)
-            )
-
-@router.get("/{workflow_id}/status/{execution_id}", response_model=WorkflowStatusResponse)
-async def get_workflow_status(workflow_id: str, execution_id: str):
-    """获取工作流运行状态"""
-    execution = running_workflows.get(execution_id)
-    if not execution or execution["workflow_id"] != workflow_id:
-        raise HTTPException(
-            status_code=404,
-            detail=f"Execution not found: {execution_id}"
-        )
-    
-    return WorkflowStatusResponse(
-        status=execution["status"],
-        current_step=execution.get("current_step"),
-        total_steps=execution.get("total_steps"),
-        start_time=execution.get("start_time"),
-        execution_time=execution.get("execution_time"),
-        error=execution.get("error"),
-        result=execution.get("result")
-    )
-
-@router.post("/{workflow_id}/stop")
-async def stop_workflow(
-    workflow_id: str,
-    execution_id: Optional[str] = Query(None, description="特定执行ID，如果不提供则停止该工作流的所有运行中实例")
-):
-    """停止工作流执行"""
-    stopped = False
-    
-    if execution_id:
-        execution = running_workflows.get(execution_id)
-        if (execution and 
-            execution["workflow_id"] == workflow_id and 
-            execution["status"] == WorkflowStatus.RUNNING):
-            execution["status"] = WorkflowStatus.STOPPED
-            stopped = True
-    else:
-        for exec_id, execution in running_workflows.items():
-            if (execution["workflow_id"] == workflow_id and 
-                execution["status"] == WorkflowStatus.RUNNING):
-                execution["status"] = WorkflowStatus.STOPPED
-                stopped = True
-    
-    if not stopped:
-        raise HTTPException(
-            status_code=404,
-            detail=f"No running execution found for workflow: {workflow_id}"
-        )
-    
-    return {"status": "stopped"} 
-
-@router.get("/{workflow_id}/result/{execution_id}", response_model=WorkflowResult)
-async def get_workflow_result(workflow_id: str, execution_id: str):
-    """获取异步执行的工作流结果
-    
-    Args:
-        workflow_id: 工作流ID
-        execution_id: 执行ID
-    
-    Returns:
-        工作流执行结果，包括状态、结果、执行时间等
-        
-    Raises:
-        HTTPException: 当执行记录不存在时
-    """
-    execution = running_workflows.get(execution_id)
-    if not execution or execution["workflow_id"] != workflow_id:
-        raise HTTPException(
-            status_code=404,
-            detail=f"Execution not found: {execution_id}"
-        )
-    
-    execution_time = None
-    if execution["status"] in [WorkflowStatus.COMPLETED, WorkflowStatus.FAILED]:
-        execution_time = time.time() - execution["start_time"]
-    
-    return WorkflowResult(
-        execution_id=execution_id,
-        workflow_id=workflow_id,
-        status=execution["status"],
-        result=execution.get("result"),
-        execution_time=execution_time,
-        error=execution.get("error"),
-        start_time=execution["start_time"]
     ) 
