@@ -1,3 +1,6 @@
+
+![rn0krugs5skb8frvfxh5](https://github.com/user-attachments/assets/9be88b3a-a508-40ed-bcab-b7688adf79a5)
+
 # AI Workflow Service
 
 AI Workflow Service 是一个灵活的 AI 工作流编排服务，支持多种 AI 模型和工具的组合调用。
