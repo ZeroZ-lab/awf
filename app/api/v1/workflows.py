@@ -1,6 +1,6 @@
 from fastapi import APIRouter, HTTPException, BackgroundTasks
 from fastapi.responses import StreamingResponse
-from pydantic import BaseModel, validator
+from pydantic import BaseModel, field_validator
 from typing import Dict, Any, Optional
 from app.services.workflow_executor import WorkflowExecutor
 from app.core.config import load_config, DEFAULT_WORKFLOWS_DIR, DEFAULT_MODELS_FILE, DEFAULT_TOOLS_FILE
@@ -14,12 +14,15 @@ router = APIRouter()
 logger = logging.getLogger(__name__)
 
 class WorkflowRequest(BaseModel):
+    """工作流请求模型"""
     workflow_id: str
     input_text: str
     parameters: Optional[Dict[str, Any]] = None
     
-    @validator("parameters")
+    @field_validator("parameters")
+    @classmethod
     def validate_parameters(cls, v):
+        """验证参数"""
         if v is None:
             return {}
         return v

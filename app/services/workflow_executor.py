@@ -2,6 +2,7 @@ from typing import Dict, Any, List, Optional, AsyncGenerator
 from app.services.agent_executor import run_react_agent
 from app.services.model_manager import models
 from app.services.condition_executor import ConditionExecutorFactory
+from app.services.parallel_executor import ParallelExecutor
 from app.core.config import load_config, DEFAULT_WORKFLOWS_DIR, DEFAULT_MODELS_FILE, DEFAULT_TOOLS_FILE
 import logging
 import json
@@ -21,14 +22,11 @@ class WorkflowExecutor:
         self.workflow_config = workflow_config
         self.context = {
             "workflow_id": workflow_config.get("workflow_id"),
-            "steps_results": [],
-            "input": None,
-            "parameters": None,
-            "final_result": None
+            "parameters": workflow_config.get("parameters", {}),
+            "steps_results": []
         }
-        
-        # 创建条件执行器
         self.condition_executor = ConditionExecutorFactory(self._execute_step)
+        self.parallel_executor = ParallelExecutor(self._execute_step)
         
         # 验证工作流配置
         if not self._validate_workflow_config(workflow_config):
@@ -159,6 +157,12 @@ class WorkflowExecutor:
         # 处理条件步骤
         if step_type in ["if", "switch", "match"]:
             return await self.condition_executor.execute(step, input_text, self.context)
+            
+        # 处理并行步骤
+        elif step_type == "parallel":
+            results = await self.parallel_executor.execute(step, input_text, self.context)
+            # 合并并行执行结果
+            return "\n".join(results)
         
         # 处理 LLM 步骤
         elif step_type == "llm":

@@ -95,7 +95,9 @@ async def test_workflow_initialization(simple_workflow_config):
     assert executor.workflow_config == simple_workflow_config
     assert executor.context["workflow_id"] == "test_workflow"
     assert executor.context["steps_results"] == []
-    assert executor.context["parameters"] is None
+    assert executor.context["parameters"] == simple_workflow_config.get("parameters", {})
+    assert "max_length" in executor.context["parameters"]
+    assert "style" in executor.context["parameters"]
 
 @pytest.mark.asyncio
 async def test_simple_workflow_execution(simple_workflow_config, mock_models):

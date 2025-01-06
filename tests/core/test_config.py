@@ -97,8 +97,8 @@ def test_invalid_workflow_config(mock_config_files, tmp_path):
     invalid_workflow = tmp_path / "workflows" / "invalid.yaml"
     invalid_workflow.write_text("""
 workflow_id: invalid
-# 缺少必需的字段
-""")
+# Missing required fields
+""", encoding='utf-8')
     
     with pytest.raises(ValueError, match="Invalid workflow configuration"):
         load_config(
@@ -113,8 +113,8 @@ def test_invalid_model_config(mock_config_files, tmp_path):
     invalid_models.write_text("""
 models:
   - model_id: invalid
-    # 缺少必需的字段
-""")
+    # Missing required fields
+""", encoding='utf-8')
     
     with pytest.raises(ValueError, match="Invalid model configuration"):
         load_config(
@@ -129,8 +129,8 @@ def test_invalid_tool_config(mock_config_files, tmp_path):
     invalid_tools.write_text("""
 tools:
   - name: invalid
-    # 缺少必需的字段
-""")
+    # Missing required fields
+""", encoding='utf-8')
     
     with pytest.raises(ValueError, match="Invalid tool configuration"):
         load_config(
