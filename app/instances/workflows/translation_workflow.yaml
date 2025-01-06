@@ -1,11 +1,55 @@
 workflow_id: translation_workflow
 name: 翻译工作流
+description: 将文本翻译成指定的目标语言
+version: "1.0"
+
+parameters:
+  target_language:
+    type: string
+    default: "en"
+    required: false
+    description: "目标语言"
+  style:
+    type: string
+    default: "professional"
+    required: false
+    description: "翻译风格"
+  preserve_format:
+    type: boolean
+    default: true
+    required: false
+    description: "是否保留原文格式"
+
 steps:
   - type: llm
+    id: translation
+    description: "文本翻译"
     model: openrouter-deepseek
     prompt_template: |
-      请将以下内容翻译成英文：
+      请将以下内容翻译成$param(target_language)：
       
       {input_text}
       
-      请确保翻译准确且自然。 
+      要求：
+      1. 使用$param(style)的表述风格
+      2. 确保翻译准确且自然
+      3. 保持专业术语的准确性
+      4. $if($param(preserve_format), "保持原文的格式和段落结构", "可以适当调整格式以符合目标语言习惯")
+    temperature: 0.4
+    max_tokens: 1000
+
+  - type: llm
+    id: polish
+    description: "润色翻译"
+    model: openrouter-deepseek
+    prompt_template: |
+      请对以下翻译结果进行润色，确保更符合$param(target_language)的表达习惯：
+      
+      $output(translation)
+      
+      要求：
+      1. 改善表达的自然度
+      2. 确保符合目标语言的语言习惯
+      3. 保持专业性和准确性
+    temperature: 0.3
+    max_tokens: 1000 

@@ -8,6 +8,7 @@ import logging
 import json
 import time
 import asyncio
+import re
 
 logger = logging.getLogger(__name__)
 
@@ -38,41 +39,47 @@ class WorkflowExecutor:
         return all(field in config for field in required_fields)
     
     async def execute(self, input_text: str, parameters: Optional[Dict[str, Any]] = None) -> str:
-        """
-        执行工作流
+        """执行工作流"""
+        if parameters is None:
+            parameters = {}
+            
+        # 处理参数默认值
+        workflow_params = self.workflow_config.get("parameters", {})
+        processed_params = {}
         
-        Args:
-            input_text: 输入文本
-            parameters: 可选参数
+        # 先设置所有默认值
+        for param_name, param_config in workflow_params.items():
+            if isinstance(param_config, dict):
+                processed_params[param_name] = param_config.get("default")
+        
+        # 然后用用户提供的参数覆盖默认值
+        for param_name, param_value in parameters.items():
+            if param_name in workflow_params:
+                processed_params[param_name] = param_value
+        
+        # 检查必需参数
+        for param_name, param_config in workflow_params.items():
+            if isinstance(param_config, dict) and param_config.get("required", False):
+                if processed_params.get(param_name) is None:
+                    logger.error(f"Missing required parameter: {param_name}")
+                    logger.error(f"Parameter config: {param_config}")
+                    raise ValueError(f"Missing required parameter: {param_name}")
+        
+        # 记录参数处理结果
+        logger.info(f"Original parameters: {parameters}")
+        logger.info(f"Processed parameters: {processed_params}")
             
-        Returns:
-            str: 执行结果
-        """
-        try:
-            self.context["input"] = input_text
-            self.context["parameters"] = parameters or {}
-            self.context["steps_results"] = []  # 重置步骤结果
+        # 初始化上下文
+        self.context = {
+            "parameters": processed_params,
+            "steps_results": []
+        }
+        
+        # 执行工作流步骤
+        for step in self.workflow_config.get("steps", []):
+            input_text = await self._execute_step(step, input_text)
             
-            result = None
-            for step in self.workflow_config["steps"]:
-                result = await self._execute_step(step, input_text)
-                # 记录步骤结果
-                self.context["steps_results"].append({
-                    "step_type": step.get("type"),
-                    "input": input_text,
-                    "output": result,
-                    "parameters": {
-                        **self.context.get("parameters", {}),
-                        **step.get("parameters", {})
-                    }
-                })
-                input_text = result  # 使用上一步的结果作为下一步的输入
-                
-            self.context["final_result"] = result
-            return result
-        except Exception as e:
-            logger.error(f"Error executing workflow: {str(e)}")
-            raise
+        return input_text
     
     async def stream_execute(self, input_text: str, parameters: Optional[Dict[str, Any]] = None) -> AsyncGenerator[Dict[str, Any], None]:
         """
@@ -86,8 +93,40 @@ class WorkflowExecutor:
             Dict[str, Any]: 执行事件
         """
         try:
-            self.context["input"] = input_text
-            self.context["parameters"] = parameters or {}
+            if parameters is None:
+                parameters = {}
+                
+            # 处理参数默认值
+            workflow_params = self.workflow_config.get("parameters", {})
+            processed_params = {}
+            
+            # 先设置所有默认值
+            for param_name, param_config in workflow_params.items():
+                if isinstance(param_config, dict):
+                    processed_params[param_name] = param_config.get("default")
+            
+            # 然后用用户提供的参数覆盖默认值
+            for param_name, param_value in parameters.items():
+                if param_name in workflow_params:
+                    processed_params[param_name] = param_value
+            
+            # 检查必需参数
+            for param_name, param_config in workflow_params.items():
+                if isinstance(param_config, dict) and param_config.get("required", False):
+                    if processed_params.get(param_name) is None:
+                        logger.error(f"Missing required parameter: {param_name}")
+                        logger.error(f"Parameter config: {param_config}")
+                        raise ValueError(f"Missing required parameter: {param_name}")
+            
+            # 记录参数处理结果
+            logger.info(f"Original parameters: {parameters}")
+            logger.info(f"Processed parameters: {processed_params}")
+            
+            self.context = {
+                "input": input_text,
+                "parameters": processed_params,
+                "steps_results": []
+            }
             
             total_steps = len(self.workflow_config["steps"])
             current_step = 0
@@ -141,29 +180,144 @@ class WorkflowExecutor:
             logger.error(f"Error executing workflow: {str(e)}")
             raise
     
-    async def _execute_step(self, step: Dict[str, Any], input_text: str) -> str:
-        """
-        执行单个步骤
-        
-        Args:
-            step: 步骤配置
-            input_text: 输入文本
+    def _process_template(self, template: str, context: Dict[str, Any]) -> str:
+        """处理模板字符串"""
+        try:
+            # 替换参数引用
+            pattern = r'\$param\((.*?)\)'
+            matches = re.finditer(pattern, template)
+            for match in matches:
+                param_name = match.group(1)
+                param_value = self.context["parameters"].get(param_name)
+                if param_value is None:
+                    logger.warning(f"Parameter not found: {param_name}, using empty string")
+                    param_value = ""
+                template = template.replace(match.group(0), str(param_value))
             
-        Returns:
-            str: 执行结果
-        """
+            # 替换函数调用，从内到外处理
+            while True:
+                # 查找最内层的函数调用
+                pattern = r'\$(\w+)\(([^$\(\)]*)\)'
+                match = re.search(pattern, template)
+                if not match:
+                    break
+                    
+                func_name = match.group(1)
+                args = [arg.strip() for arg in match.group(2).split(',')]
+                
+                if func_name == "if":
+                    if len(args) != 3:
+                        raise ValueError("if function requires 3 arguments: condition, true_value, false_value")
+                    condition, true_value, false_value = args
+                    
+                    # 处理特殊条件
+                    if condition == "has_summary":
+                        has_summary = any(result.get("id") == "summary" for result in self.context["steps_results"])
+                        result = true_value if has_summary else false_value
+                    else:
+                        # 处理其他条件
+                        condition_result = self._process_condition(condition, context)
+                        result = true_value if condition_result else false_value
+                        
+                    template = template.replace(match.group(0), result)
+                    
+                elif func_name == "output":
+                    if len(args) != 1:
+                        raise ValueError("output function requires 1 argument")
+                    step_id = args[0]
+                    output = None
+                    for result in self.context["steps_results"]:
+                        if result.get("id") == step_id:
+                            output = result.get("output")
+                            break
+                    if output is None:
+                        raise ValueError(f"Step output not found: {step_id}")
+                    template = template.replace(match.group(0), str(output))
+                    
+                elif func_name == "length":
+                    if len(args) != 1:
+                        raise ValueError("length function requires 1 argument")
+                    step_id = args[0]
+                    output = None
+                    for result in self.context["steps_results"]:
+                        if result.get("id") == step_id:
+                            output = result.get("output")
+                            break
+                    if output is None:
+                        raise ValueError(f"Step output not found: {step_id}")
+                    value = len(output)
+                    template = template.replace(match.group(0), str(value))
+                    
+                else:
+                    raise ValueError(f"Unknown function: {func_name}")
+            
+            # 替换基本变量
+            return template.format(**context)
+            
+        except KeyError as e:
+            raise ValueError(f"Template variable not found: {str(e)}")
+        except Exception as e:
+            raise ValueError(f"Error processing template: {str(e)}")
+            
+    def _process_condition(self, condition: str, context: Dict[str, Any]) -> bool:
+        """处理条件表达式"""
+        try:
+            # 替换所有变量引用
+            processed_condition = self._process_template(condition, context)
+            
+            # 将处理后的条件转换为Python表达式
+            try:
+                # 安全地评估条件
+                result = eval(processed_condition, {"__builtins__": {}}, {})
+                return bool(result)
+            except Exception as e:
+                raise ValueError(f"Invalid condition expression: {str(e)}")
+                
+        except Exception as e:
+            raise ValueError(f"Error processing condition: {str(e)}")
+
+    async def _execute_step(self, step: Dict[str, Any], input_text: str) -> str:
+        """执行单个步骤"""
         step_type = step.get("type")
+        step_id = step.get("id", "unknown")
+        logger.info(f"Executing step {step_id} of type {step_type}")
         
         # 处理条件步骤
-        if step_type in ["if", "switch", "match"]:
-            return await self.condition_executor.execute(step, input_text, self.context)
+        if step_type == "if":
+            condition = step.get("condition")
+            if not condition:
+                raise ValueError("Condition is required for if step")
+                
+            # 创建条件上下文
+            context = {
+                "input_text": input_text,
+                "parameters": self.context.get("parameters", {}),
+                "outputs": {
+                    result["id"]: result["output"]
+                    for result in self.context["steps_results"]
+                    if "id" in result
+                }
+            }
             
-        # 处理并行步骤
-        elif step_type == "parallel":
-            results = await self.parallel_executor.execute(step, input_text, self.context)
-            # 合并并行执行结果
-            return "\n".join(results)
-        
+            # 评估条件
+            try:
+                condition_result = self._process_condition(condition, context)
+                logger.info(f"Condition '{condition}' evaluated to {condition_result}")
+                logger.info(f"Available outputs: {list(context['outputs'].keys())}")
+            except Exception as e:
+                raise ValueError(f"Error evaluating condition: {str(e)}")
+            
+            # 执行相应分支
+            if condition_result:
+                logger.info("Executing 'then' branch")
+                for then_step in step.get("then", []):
+                    input_text = await self._execute_step(then_step, input_text)
+            else:
+                logger.info("Executing 'else' branch")
+                for else_step in step.get("else", []):
+                    input_text = await self._execute_step(else_step, input_text)
+            return input_text
+            
         # 处理 LLM 步骤
         elif step_type == "llm":
             model_id = step.get("model")
@@ -174,32 +328,43 @@ class WorkflowExecutor:
             if not model:
                 raise ValueError(f"Model not found: {model_id}")
             
-            # 合并参数
-            params = {
-                **self.context.get("parameters", {}),
-                **step.get("parameters", {})
+            # 创建模板上下文
+            context = {
+                "input_text": input_text,
+                "parameters": self.context.get("parameters", {}),
+                "outputs": {
+                    result["id"]: result["output"]
+                    for result in self.context["steps_results"]
+                    if "id" in result
+                }
             }
             
-            # 格式化提示模板
+            # 记录可用的输出
+            logger.info(f"Step {step_id} - Available outputs: {list(context['outputs'].keys())}")
+            
+            # 处理提示模板
             prompt_template = step.get("prompt_template", "{input_text}")
-            prompt = prompt_template.format(
-                input_text=input_text,
-                **self.context
-            )
+            try:
+                prompt = self._process_template(prompt_template, context)
+                logger.info(f"Step {step_id} - Prompt template: {prompt_template}")
+                logger.info(f"Step {step_id} - Processed prompt: {prompt}")
+            except Exception as e:
+                raise ValueError(f"Error processing template: {str(e)}")
             
             # 生成文本
-            result = await model.generate_text(prompt, **params)
-            return result
-        
-        # 处理工具步骤
-        elif step_type == "tool":
-            tool_name = step.get("tool")
-            if not tool_name:
-                raise ValueError("Tool name is required")
+            result = await model.generate_text(prompt, **step.get("parameters", {}))
+            logger.info(f"Step {step_id} - Result: {result}")
             
-            # TODO: 实现工具调用
-            raise NotImplementedError("Tool execution not implemented yet")
-        
+            # 保存结果
+            if "id" in step:
+                self.context["steps_results"].append({
+                    "id": step["id"],
+                    "output": result
+                })
+                logger.info(f"Step {step_id} - Saved result with id: {step['id']}")
+            
+            return result
+            
         else:
             raise ValueError(f"Unknown step type: {step_type}")
     

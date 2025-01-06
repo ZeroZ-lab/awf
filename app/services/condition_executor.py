@@ -31,6 +31,18 @@ class BaseConditionExecutor(ABC):
         if not self._validate_condition(expr):
             raise ValueError(f"Invalid expression: {expr}")
         
+        # 创建输出访问函数
+        outputs = {}
+        for result in context.get("steps_results", []):
+            if "id" in result:
+                outputs[result["id"]] = result["output"]
+                
+        def get_output(key, default=""):
+            return outputs.get(key, default)
+            
+        def has_output(key):
+            return key in outputs
+        
         # 创建安全的执行环境
         safe_context = {
             "len": len,
@@ -44,7 +56,11 @@ class BaseConditionExecutor(ABC):
             "max": max,
             "min": min,
             "sum": sum,
-            **context
+            "get_output": get_output,
+            "has_output": has_output,
+            "vars": {
+                "parameters": context.get("parameters", {})
+            }
         }
         
         # Add input_text to context if available

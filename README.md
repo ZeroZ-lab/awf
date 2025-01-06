@@ -1,262 +1,216 @@
 ![rn0krugs5skb8frvfxh5](https://github.com/user-attachments/assets/9be88b3a-a508-40ed-bcab-b7688adf79a5)
 
-# AI Workflow Service
+# AI Workflow Framework
 
-AI Workflow Service is a flexible AI workflow orchestration service that supports the combination of multiple AI models and tools.
+A flexible AI workflow framework that supports configurable workflow definition and execution.
 
-## Features
+## Workflow Configuration Guide
 
-### Workflow System
-- Support for multi-step serial execution
-- Rich conditional control support
-  - if-else conditional branching
-  - switch-case branching
-  - match pattern matching
-- Error handling and retry mechanisms
-- Context passing and result optimization
+Workflows are defined in YAML format, supporting conditional branching, model invocation, and other features. Below is the complete configuration guide.
 
-Coming soon:
-- Parallel task execution
-- Loop execution
-- Nested workflows
-- Agents as workflow nodes
+### Basic Structure
 
-### Conditional Execution Examples
-
-#### 1. if-else Conditional Branching
 ```yaml
-steps:
-  - type: if
-    condition: "len(input_text) > 100"  # Supports expressions
-    then:  # Execute when condition is true
-      - type: llm
-        model: openrouter-deepseek
-        prompt_template: "This is a long text, please summarize: {input_text}"
-    else:  # Execute when condition is false
-      - type: llm
-        model: openrouter-deepseek
-        prompt_template: "This is a short text, please process directly: {input_text}"
+workflow_id: unique_workflow_id  # Unique identifier for the workflow
+name: Workflow Name             # Name of the workflow
+description: Description        # Workflow description
+version: "1.0"                 # Version number
+
+parameters:                     # Workflow parameter definitions
+  param_name:                  # Parameter name
+    type: string              # Parameter type: string/integer/float/boolean
+    default: "default_value"  # Default value
+    required: false           # Whether required
+    description: "Parameter description"  # Parameter description
+
+steps:                         # Workflow step definitions
+  - type: step_type           # Step type
+    id: step_id               # Step identifier
+    description: "Step description"  # Step description
+    # Other step-specific configurations...
 ```
 
-#### 2. switch-case Branching
+### Parameter Configuration
+
+Parameters support the following configuration options:
+
 ```yaml
-steps:
-  - type: switch
-    value: "status_code"  # Value to match
-    cases:
-      - value: "200"
-        steps:
-          - type: llm
-            model: openrouter-deepseek
-            prompt_template: "Process successful response: {input_text}"
-      - value: "404"
-        steps:
-          - type: llm
-            model: openrouter-deepseek
-            prompt_template: "Process not found error: {input_text}"
-    default:  # Default case
-      - type: llm
-        model: openrouter-deepseek
-        prompt_template: "Process other cases: {input_text}"
+parameters:
+  language:
+    type: string              # Parameter type
+    default: "en"            # Default value
+    required: false          # Whether required
+    description: "Output language"  # Parameter description
+  max_length:
+    type: integer
+    default: 500
+    required: false
+    description: "Maximum length limit"
 ```
 
-#### 3. match Pattern Matching
+### Step Types
+
+#### 1. LLM Step
+
+Used to call language models for text generation.
+
 ```yaml
-steps:
-  - type: match
-    value: "response.status"
-    conditions:
-      - when: "value >= 200 and value < 300"
-        steps:
-          - type: llm
-            model: openrouter-deepseek
-            prompt_template: "Process successful response: {input_text}"
-      - when: "value >= 400 and value < 500"
-        steps:
-          - type: llm
-            model: openrouter-deepseek
-            prompt_template: "Process client error: {input_text}"
-    default:
-      - type: llm
-        model: openrouter-deepseek
-        prompt_template: "Process other cases: {input_text}"
+- type: llm
+  id: step_id                # Unique step identifier
+  description: "Step description"  # Step description
+  model: model_id           # Model identifier
+  prompt_template: |        # Prompt template
+    Write your prompt here
+    Use {input_text} to reference input
+    Use $param(param_name) to reference parameters
+    Use $output(step_id) to reference other step outputs
+  temperature: 0.7         # Temperature parameter
+  max_tokens: 1000        # Maximum generation length
 ```
 
-### AI Model Integration
-- OpenAI API support
-- OpenRouter API support
-- Flexible model configuration system
+#### 2. Conditional Step
 
-### Tool System
-- Custom tool development support
-- Extensible tool registration mechanism
+Used to implement conditional branching logic.
 
-### System Features
-- Complete logging
-- Configuration validation
-- Error handling
-- API documentation
-
-## Quick Start
-
-### 1. Environment Setup
-```bash
-# Create and activate virtual environment
-python -m venv venv
-source venv/bin/activate  # Linux/Mac
-# or
-.\venv\Scripts\activate  # Windows
-
-# Install dependencies
-pip install -e .
-
-# Install development dependencies (optional)
-pip install pytest==8.3.4 pytest-asyncio==0.25.1 pytest-mock==3.14.0
-```
-
-### 2. Configuration
-```bash
-# Copy environment variable template
-cp .env.example .env
-
-# Edit .env file, set necessary configuration items:
-# - OPENAI_API_KEY
-# - OPENROUTER_API_KEY
-# - LOG_LEVEL
-```
-
-### 3. Start Service
-```bash
-# Development mode
-uvicorn app.main:app --reload --port 8000
-
-# Production mode
-uvicorn app.main:app --host 0.0.0.0 --port 8000
-```
-
-### 4. Run Tests
-```bash
-# Run all tests
-pytest tests/
-
-# Run specific test file
-pytest tests/test_api.py
-
-# Run specific test case
-pytest tests/test_api.py::test_run_workflow
-```
-
-## Configuration Files
-
-### Workflow Configuration
-Location: `app/instances/workflows/*.yaml`
 ```yaml
-workflow_id: example_workflow
-name: Example Workflow
-description: Workflow description
+- type: if
+  description: "Condition description"
+  condition: "$length(step_id) > $param(max_length)"  # Condition expression
+  then:                    # Steps to execute when condition is true
+    - type: llm
+      # ... step configuration
+  else:                   # Steps to execute when condition is false
+    - type: llm
+      # ... step configuration
+```
+
+### Template Syntax
+
+The following special syntax is supported in prompt templates:
+
+1. Parameter References:
+```
+$param(parameter_name)    # Reference workflow parameters
+```
+
+2. Output References:
+```
+$output(step_id)         # Reference other step outputs
+```
+
+3. Function Calls:
+```
+$length(step_id)         # Get text length
+$if(condition, value1, value2)  # Conditional expression
+```
+
+4. Input References:
+```
+{input_text}             # Reference current step input text
+```
+
+### Condition Expressions
+
+Condition steps support the following expressions:
+
+1. Comparison Operations:
+```yaml
+condition: "$length(step_id) > $param(max_length)"  # Greater than
+condition: "$length(step_id) < $param(max_length)"  # Less than
+condition: "$length(step_id) == $param(max_length)" # Equal to
+```
+
+2. Special Conditions:
+```yaml
+condition: "has_summary"  # Check if specific step output exists
+```
+
+### Complete Example
+
+```yaml
+workflow_id: text_processing
+name: Text Processing Workflow
+description: Process and optimize text content
 version: "1.0"
+
+parameters:
+  language:
+    type: string
+    default: "en"
+    required: false
+    description: "Output language"
+  style:
+    type: string
+    default: "professional"
+    required: false
+    description: "Output style"
+  max_length:
+    type: integer
+    default: 500
+    required: false
+    description: "Maximum length limit"
+
 steps:
   - type: llm
+    id: initial_response
+    description: "Generate initial response"
     model: openrouter-deepseek
     prompt_template: |
-      Please process the following content: {input_text}
+      Please respond to the following content using $param(style) tone in $param(language):
+      {input_text}
+    temperature: 0.7
+    max_tokens: 1000
+
+  - type: if
+    description: "Decide whether to summarize based on text length"
+    condition: "$length(initial_response) > $param(max_length)"
+    then:
+      - type: llm
+        id: summary
+        description: "Generate summary"
+        model: openrouter-deepseek
+        prompt_template: |
+          Please summarize the following content while keeping key points:
+          $output(initial_response)
+        temperature: 0.3
+        max_tokens: 200
+    else:
+      - type: llm
+        id: optimization
+        description: "Optimize expression"
+        model: openrouter-deepseek
+        prompt_template: |
+          Please optimize the expression of the following content for clarity and conciseness:
+          $output(initial_response)
+        temperature: 0.5
+        max_tokens: 300
+
+  - type: llm
+    id: final_polish
+    description: "Final polish"
+    model: openrouter-deepseek
+    prompt_template: |
+      Please polish the following content to ensure natural and fluent language:
+      $output($if(has_summary, summary, optimization))
+    temperature: 0.4
+    max_tokens: 500
 ```
 
-### Model Configuration
-Location: `app/instances/models.yaml`
-```yaml
-models:
-  - model_id: openrouter-deepseek
-    name: DeepSeek Chat
-    type: openrouter
-    params:
-      model_name: deepseek-chat
-      api_key_env: OPENROUTER_API_KEY
-```
+## Important Notes
 
-### Tool Configuration
-Location: `app/instances/tools.yaml`
-```yaml
-tools:
-  - name: SearchTool
-    description: Search tool
-    class_name: SearchTool
-    module: app.tools.search
-```
+1. All step `id`s must be unique within the workflow
+2. Parameter references must use defined parameter names
+3. Output references must use IDs of previously executed steps
+4. Condition expressions should maintain clear logic and avoid complex nesting
+5. Prompt templates should be clear and unambiguous
 
-## API Endpoints
+## Best Practices
 
-### Execute Workflow
-```bash
-POST /api/v1/workflows/{workflow_id}/run
-Content-Type: application/json
-
-{
-    "input_text": "Content to process",
-    "parameters": {
-        "max_length": 100
-    }
-}
-```
-
-Response format:
-```json
-{
-    "result": "Processing result"
-}
-```
-
-Response status codes:
-- 200: Success
-- 404: Workflow not found
-- 422: Invalid request parameters
-- 500: Internal server error
-
-### Stream Workflow Execution
-```bash
-POST /api/v1/workflows/{workflow_id}/run/stream
-Content-Type: application/json
-
-{
-    "input_text": "Content to process",
-    "parameters": {
-        "max_length": 100
-    }
-}
-```
-
-Response format:
-```
-data: {"type": "step_start", "step": "Generate initial response", "timestamp": "..."}
-
-data: {"type": "step_complete", "step": "Generate initial response", "result": "...", "timestamp": "..."}
-
-data: {"type": "complete", "result": "Final result", "timestamp": "..."}
-```
-
-### Health Check
-```bash
-GET /health
-
-Response:
-{
-    "status": "ok"
-}
-```
-
-## Development Guide
-
-### Adding New Tools
-1. Create new tool class in `app/services/tools/`
-2. Inherit from `BaseTool` class
-3. Implement `__call__` method
-4. Register tool in `app/instances/tools.yaml`
-
-### Error Handling
-The system implements multi-layer error handling:
-1. API Layer: Unified error response format
-2. Workflow Layer: Step execution error handling
-3. Model Layer: API call retry and error handling
-4. Configuration Layer: Configuration validation and error prompts
+1. Provide clear descriptions for each step
+2. Set reasonable parameter default values
+3. Use appropriate temperature parameters to control output randomness
+4. Set suitable maximum generation lengths as needed
+5. Pay attention to dependencies between steps
+6. Maintain clear workflow structure and avoid overly complex logic
 
 [中文文档](README_ZH.md)

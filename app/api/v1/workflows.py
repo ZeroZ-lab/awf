@@ -15,7 +15,6 @@ logger = logging.getLogger(__name__)
 
 class WorkflowRequest(BaseModel):
     """工作流请求模型"""
-    workflow_id: str
     input_text: str
     parameters: Optional[Dict[str, Any]] = None
     

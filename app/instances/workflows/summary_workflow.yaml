@@ -4,11 +4,20 @@ description: 对文章进行智能总结和优化
 version: "1.0"
 
 parameters:
-  max_length: 200
-  style: "professional"
+  max_length:
+    type: integer
+    default: 200
+    required: false
+    description: "最大总结长度"
+  style:
+    type: string
+    default: "professional"
+    required: false
+    description: "输出风格"
 
 steps:
   - type: llm
+    id: initial_summary
     description: "生成初始总结"
     model: openrouter-deepseek
     prompt_template: |
@@ -21,26 +30,27 @@ steps:
       1. 提供一个简洁但全面的总结
       2. 突出文章的关键点
       3. 保持客观性
-      4. 总结长度控制在{max_length}字以内
+      4. 总结长度控制在$param(max_length)字以内
       
       请按照以上要求进行总结。
     temperature: 0.3
     max_tokens: 500
 
   - type: llm
+    id: optimized_summary
     description: "优化总结"
     model: openrouter-deepseek
     prompt_template: |
       请对以下总结进行改进和优化：
       
       原始总结：
-      {input_text}
+      $output(initial_summary)
       
       要求：
       1. 改善表达的流畅性
       2. 确保逻辑连贯
       3. 补充可能遗漏的重要信息
-      4. 使用{style}的表述方式
+      4. 使用$param(style)的表述方式
       
       请提供优化后的总结。
     temperature: 0.4

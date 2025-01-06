@@ -1,0 +1,15 @@
+tools:
+  - name: workflow
+    description: 执行工作流
+    class_name: WorkflowTool
+    module: app.tools.workflow
+    
+  - name: parallel
+    description: 并行执行
+    class_name: ParallelTool
+    module: app.tools.workflow
+    
+  - name: condition
+    description: 条件判断
+    class_name: ConditionTool
+    module: app.tools.workflow 

@@ -1,65 +1,79 @@
 workflow_id: conditional_workflow
+name: 条件执行工作流
 description: 演示条件执行功能的工作流
 version: "1.0"
 
 parameters:
-  threshold: 0.8
-  language: "zh"
-  max_length: 100
+  threshold:
+    type: float
+    default: 0.8
+    required: false
+    description: "阈值"
+  language:
+    type: string
+    default: "zh"
+    required: false
+    description: "处理语言"
+  max_length:
+    type: integer
+    default: 100
+    required: false
+    description: "最大长度限制"
 
 steps:
   - type: if
     description: "根据输入文本长度选择不同的处理路径"
-    condition: "len(input_text) > parameters['max_length']"
+    condition: "$length(input_text) > $param(max_length)"
     then:
-      - type: agent
+      - type: llm
+        id: long_text
         description: "处理长文本"
         model: openrouter-deepseek
-        tools:
-          - name: summarize
-            description: "生成文本摘要"
+        prompt_template: |
+          请对以下长文本生成摘要：
+          {input_text}
+        temperature: 0.7
+        max_tokens: 200
     else:
-      - type: agent
+      - type: llm
+        id: short_text
         description: "处理短文本"
         model: openrouter-deepseek
-        tools:
-          - name: analyze
-            description: "分析文本内容"
+        prompt_template: |
+          请分析以下短文本的内容：
+          {input_text}
+        temperature: 0.7
+        max_tokens: 100
 
-  - type: switch
+  - type: if
     description: "根据语言选择不同的处理模型"
-    value: "parameters['language']"
-    cases:
-      - value: "zh"
-        steps:
-          - type: agent
-            model: openrouter-deepseek
-            description: "使用中文模型处理"
-      - value: "en"
-        steps:
-          - type: agent
-            model: openrouter-deepseek
-            description: "使用英文模型处理"
-    default:
-      - type: agent
+    condition: "$param(language) == 'zh'"
+    then:
+      - type: llm
+        id: zh_process
         model: openrouter-deepseek
-        description: "使用默认模型处理"
+        description: "使用中文模型处理"
+        prompt_template: |
+          请用中文处理以下内容：
+          $output($if(has_long_text, long_text, short_text))
+        temperature: 0.7
+        max_tokens: 500
+    else:
+      - type: llm
+        id: en_process
+        model: openrouter-deepseek
+        description: "使用英文模型处理"
+        prompt_template: |
+          Please process the following content in English:
+          $output($if(has_long_text, long_text, short_text))
+        temperature: 0.7
+        max_tokens: 500
 
-  - type: match
-    description: "根据文本内容特征选择处理方式"
-    value: "input_text"
-    conditions:
-      - when: "value.startswith('{')"
-        steps:
-          - type: agent
-            model: openrouter-deepseek
-            description: "处理 JSON 格式数据"
-      - when: "value.startswith('<')"
-        steps:
-          - type: agent
-            model: openrouter-deepseek
-            description: "处理 XML 格式数据"
-    default:
-      - type: agent
-        model: openrouter-deepseek
-        description: "处理纯文本数据" 
+  - type: llm
+    id: final_output
+    description: "最终输出"
+    model: openrouter-deepseek
+    prompt_template: |
+      $output($if($param(language) == 'zh', zh_process, en_process))
+    temperature: 0.4
+    max_tokens: 500 

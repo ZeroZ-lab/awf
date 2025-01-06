@@ -1,13 +1,10 @@
-from typing import Generator
-from app.core.config import config
-from app.services.tool_manager import tools_registry
+from typing import Dict, Any
+from app.services.tool_manager import tools
 from app.services.model_manager import models
+from app.tools.base import BaseTool
 
-def get_config() -> dict:
-    return config
+def get_tools() -> Dict[str, BaseTool]:
+    return tools.tools
 
-def get_tools() -> dict:
-    return tools_registry
-
-def get_models() -> dict:
-    return models 
+def get_models() -> Dict[str, Any]:
+    return models.models 

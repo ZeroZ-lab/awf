@@ -1,0 +1,15 @@
+tools:
+  - name: calculate
+    description: 数学计算
+    class_name: CalculateTool
+    module: app.tools.calculate
+    
+  - name: statistics
+    description: 统计分析
+    class_name: StatisticsTool
+    module: app.tools.calculate
+    
+  - name: plot
+    description: 数据可视化
+    class_name: PlotTool
+    module: app.tools.calculate 

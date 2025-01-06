@@ -4,8 +4,8 @@ from app.models.agents import ModelConfig
 from app.services.providers.base import BaseProvider
 from app.services.providers.openai_provider import OpenAIProvider
 from app.services.providers.openrouter_provider import OpenRouterProvider
+from app.core.config_loader import ConfigLoader
 from dotenv import load_dotenv
-import yaml
 import logging
 
 logger = logging.getLogger(__name__)
@@ -20,6 +20,7 @@ PROVIDER_MAP: Dict[str, Type[BaseProvider]] = {
 class ModelManager:
     def __init__(self):
         self.models: Dict[str, BaseProvider] = {}
+        self.config_loader = ConfigLoader()
         self.load_models()
     
     def register_model(self, model_id: str, model: BaseProvider) -> None:
@@ -74,54 +75,49 @@ class ModelManager:
         Args:
             models_file: 模型配置文件路径
         """
-        if not models_file or not os.path.exists(models_file):
-            # 默认配置
-            default_configs = [
-                ModelConfig(
-                    model_id="openai-gpt-3.5-turbo-instruct",
-                    name="OpenAI GPT-3.5 Turbo Instruct",
-                    type="openai",
-                    params={
-                        "model_name": "gpt-3.5-turbo-instruct",
-                        "api_key_env": "OPENAI_API_KEY"
-                    }
-                ),
-                ModelConfig(
-                    model_id="openrouter-deepseek",
-                    name="DeepSeek via OpenRouter",
-                    type="openrouter",
-                    params={
-                        "model_name": "deepseek/deepseek-chat",
-                        "api_key_env": "OPENROUTER_API_KEY"
-                    }
-                )
-            ]
-            
-            for config in default_configs:
-                try:
-                    self.models[config.model_id] = self.create_model(config)
-                    logger.info(f"Created default model: {config.model_id}")
-                except Exception as e:
-                    logger.error(f"Error creating model {config.model_id}: {e}")
-            
-            return
-
         try:
-            with open(models_file, "r") as f:
-                models_data = yaml.safe_load(f)
-                if models_data and models_data.get('models'):
-                    for model_data in models_data['models']:
-                        try:
-                            model_config = ModelConfig(**model_data)
-                            model = self.create_model(model_config)
-                            self.models[model_config.model_id] = model
-                            logger.info(f"Loaded model from config: {model_config.model_id}")
-                        except Exception as e:
-                            logger.error(f"Error creating model {model_data.get('model_id')}: {e}")
+            # 获取工作目录的绝对路径
+            base_dir = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+            # 标准化路径
+            models_file = os.path.normpath(os.path.join(base_dir, models_file))
+            
+            # 使用新的配置加载器
+            models_data = self.config_loader.load_config(models_file)
+            
+            # 清空现有模型
+            self.models.clear()
+            
+            if not models_data or not models_data.get("models"):
+                logger.warning("No models configuration found, using defaults")
+                self._load_default_models()
+                return
+
+            has_valid_models = False
+            for model_data in models_data.get("models", []):
+                try:
+                    model_config = ModelConfig(**model_data)
+                    model = self.create_model(model_config)
+                    self.models[model_config.model_id] = model
+                    has_valid_models = True
+                    logger.info(f"Loaded model from config: {model_config.model_id}")
+                except Exception as e:
+                    logger.error(f"Error creating model {model_data.get('model_id')}: {e}")
+
+            if not has_valid_models:
+                logger.warning("No valid models loaded, using defaults")
+                self._load_default_models()
+
         except Exception as e:
             logger.error(f"Error loading models config: {e}")
-            # 使用默认配置
-            default_config = ModelConfig(
+            self._load_default_models()
+
+    def _load_default_models(self):
+        """加载默认模型配置"""
+        # 清空现有模型
+        self.models.clear()
+        
+        default_configs = [
+            ModelConfig(
                 model_id="openai-gpt-3.5-turbo-instruct",
                 name="OpenAI GPT-3.5 Turbo Instruct",
                 type="openai",
@@ -129,12 +125,24 @@ class ModelManager:
                     "model_name": "gpt-3.5-turbo-instruct",
                     "api_key_env": "OPENAI_API_KEY"
                 }
+            ),
+            ModelConfig(
+                model_id="openrouter-deepseek",
+                name="DeepSeek via OpenRouter",
+                type="openrouter",
+                params={
+                    "model_name": "deepseek/deepseek-chat",
+                    "api_key_env": "OPENROUTER_API_KEY"
+                }
             )
+        ]
+        
+        for config in default_configs:
             try:
-                self.models[default_config.model_id] = self.create_model(default_config)
-                logger.info(f"Created fallback default model: {default_config.model_id}")
+                self.models[config.model_id] = self.create_model(config)
+                logger.info(f"Created default model: {config.model_id}")
             except Exception as e:
-                logger.error(f"Error creating default model: {e}")
+                logger.error(f"Error creating default model {config.model_id}: {e}")
 
     def list_models(self) -> Dict[str, str]:
         """列出所有可用的模型

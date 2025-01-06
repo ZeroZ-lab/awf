@@ -1,0 +1,14 @@
+models:
+  - model_id: openrouter-deepseek
+    name: DeepSeek via OpenRouter
+    type: openrouter
+    params:
+      model_name: deepseek/deepseek-chat
+      api_key_env: OPENROUTER_API_KEY
+
+  - model_id: openrouter-mixtral
+    name: Mixtral via OpenRouter
+    type: openrouter
+    params:
+      model_name: mistralai/mixtral-8x7b-instruct
+      api_key_env: OPENROUTER_API_KEY 
