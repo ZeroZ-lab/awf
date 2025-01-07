@@ -24,36 +24,25 @@ wheels/
 venv/
 env/
 ENV/
-.env
 
 # IDE
 .idea/
 .vscode/
 *.swp
 *.swo
-.DS_Store
-.vs/
-
-# Testing
-.coverage
-htmlcov/
-.pytest_cache/
-.tox/
-coverage.xml
-*.cover
-.hypothesis/
 
 # Logs
-*.log
 logs/
-log/
+*.log
 
-# Project specific
-app/instances/workflows/*.yaml
-!app/instances/workflows/example_workflow.yaml
-!app/instances/workflows/conditional_workflow.yaml
-!app/instances/workflows/llm_workflow.yaml
-!app/instances/workflows/summary_workflow.yaml
+# Environment variables
+.env
+.env.*
+!.env.example
+
+# Local development
+.DS_Store
+Thumbs.db
 
 # Distribution / packaging
 .Python

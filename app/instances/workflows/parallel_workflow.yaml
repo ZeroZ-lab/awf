@@ -1,0 +1,117 @@
+workflow_id: parallel_workflow
+name: 并行处理工作流
+description: 演示并行执行功能的工作流
+version: "1.0"
+
+parameters:
+  max_length:
+    type: integer
+    default: 100
+    required: false
+    description: "最大长度限制"
+  style:
+    type: string
+    default: "professional"
+    required: false
+    description: "输出风格"
+  language:
+    type: string
+    default: "zh"
+    required: false
+    description: "输出语言"
+
+steps:
+  - type: llm
+    id: initial_content
+    description: "生成初始内容"
+    model: openrouter-deepseek
+    prompt_template: |
+      请生成一段关于人工智能的文本，包含以下几个方面：
+      1. 发展历史
+      2. 主要应用
+      3. 未来展望
+      
+      要求：
+      - 使用$param(language)语言
+      - 采用$param(style)的表述方式
+      - 每个方面的内容不少于$param(max_length)字
+    temperature: 0.7
+    max_tokens: 1000
+
+  - type: parallel
+    id: parallel_processing
+    description: "并行处理各个部分"
+    steps:
+      - type: llm
+        id: history_part
+        description: "优化发展历史部分"
+        model: openrouter-deepseek
+        prompt_template: |
+          原文中关于AI发展历史的部分如下：
+          $output(initial_content)
+          
+          请提取并优化上述文本中关于AI发展历史的部分，使其更加生动有趣。要求：
+          1. 重点突出关键的历史时刻和突破
+          2. 添加具体的年份和事件
+          3. 使用生动的语言描述
+          4. 确保内容准确性
+          5. 保持专业性的同时增加趣味性
+        temperature: 0.6
+        max_tokens: 500
+
+      - type: llm
+        id: application_part
+        description: "优化主要应用部分"
+        model: openrouter-deepseek
+        prompt_template: |
+          原文中关于AI主要应用的部分如下：
+          $output(initial_content)
+          
+          请提取并优化上述文本中关于AI主要应用的部分，补充最新的应用案例。要求：
+          1. 覆盖多个重要领域（如医疗、金融、教育等）
+          2. 加入具体的应用案例和成功故事
+          3. 突出创新性应用
+          4. 说明实际效果和影响
+          5. 重点关注最新的发展和突破
+        temperature: 0.6
+        max_tokens: 500
+
+      - type: llm
+        id: future_part
+        description: "优化未来展望部分"
+        model: openrouter-deepseek
+        prompt_template: |
+          原文中关于AI未来展望的部分如下：
+          $output(initial_content)
+          
+          请提取并优化上述文本中关于AI未来展望的部分，使其更具前瞻性。要求：
+          1. 基于当前技术趋势进行合理推测
+          2. 考虑多个维度（技术、社会、伦理等）
+          3. 提出可能的挑战和解决方案
+          4. 描述潜在的突破性进展
+          5. 平衡乐观和谨慎的态度
+        temperature: 0.6
+        max_tokens: 500
+
+  - type: llm
+    id: final_content
+    description: "整合优化后的内容"
+    model: openrouter-deepseek
+    prompt_template: |
+      请将以下并行处理的结果整合成一篇连贯的文章：
+      
+      历史部分：
+      $output(history_part)
+      
+      应用部分：
+      $output(application_part)
+      
+      未来展望：
+      $output(future_part)
+      
+      要求：
+      - 保持逻辑连贯性
+      - 添加适当的过渡语句
+      - 确保整体风格统一
+    temperature: 0.4
+    max_tokens: 1500 
