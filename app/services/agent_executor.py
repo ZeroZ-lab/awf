@@ -7,7 +7,7 @@ def run_react_agent(input_text: str, available_tools: List[BaseTool], prompt_tem
     model_id = agent_config.get("llm_model")
     llm_model = models.get(model_id)
     if not llm_model:
-        raise ValueError(f"Model not found: {model_id}")
+        raise ValueError(f"Model not found 2: {model_id}")
 
     while True:
         llm_output = react_reasoning(input_text, available_tools, prompt_template, history, llm_model)

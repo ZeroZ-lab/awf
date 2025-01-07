@@ -17,19 +17,121 @@ logger = logging.getLogger(__name__)
 def validate_workflow(workflow: Dict[str, Any]) -> bool:
     """验证工作流配置"""
     required_fields = ["workflow_id", "name", "steps"]
-    return all(field in workflow for field in required_fields)
+    
+    # 基本字段验证
+    if not all(field in workflow for field in required_fields):
+        missing_fields = [field for field in required_fields if field not in workflow]
+        logger.error(f"Missing required fields in workflow config: {missing_fields}")
+        return False
+        
+    # 类型验证
+    if not isinstance(workflow["workflow_id"], str):
+        logger.error("workflow_id must be a string")
+        return False
+    if not isinstance(workflow["name"], str):
+        logger.error("name must be a string")
+        return False
+    if not isinstance(workflow["steps"], list):
+        logger.error("steps must be a list")
+        return False
+        
+    # 步骤验证
+    for i, step in enumerate(workflow["steps"]):
+        if "type" not in step:
+            logger.error(f"Step {i} missing type field")
+            return False
+        if step["type"] == "llm":
+            if "model" not in step:
+                logger.error(f"LLM step {i} missing model field")
+                return False
+            if "prompt_template" not in step:
+                logger.error(f"LLM step {i} missing prompt_template field")
+                return False
+        elif step["type"] == "if":
+            if "condition" not in step:
+                logger.error(f"If step {i} missing condition field")
+                return False
+            if "then" not in step and "else" not in step:
+                logger.error(f"If step {i} missing then/else branches")
+                return False
+                
+    return True
 
 def validate_model(model: Dict[str, Any]) -> bool:
     """验证模型配置"""
     required_fields = ["model_id", "name", "type", "params"]
-    return all(field in model for field in required_fields)
+    
+    # 基本字段验证
+    if not all(field in model for field in required_fields):
+        missing_fields = [field for field in required_fields if field not in model]
+        logger.error(f"Missing required fields in model config: {missing_fields}")
+        return False
+        
+    # 类型验证
+    if not isinstance(model["model_id"], str):
+        logger.error("model_id must be a string")
+        return False
+    if not isinstance(model["name"], str):
+        logger.error("name must be a string")
+        return False
+    if not isinstance(model["type"], str):
+        logger.error("type must be a string")
+        return False
+    if not isinstance(model["params"], dict):
+        logger.error("params must be a dictionary")
+        return False
+        
+    # 模型类型特定验证
+    if model["type"] == "openai":
+        if "api_key_env" not in model["params"]:
+            logger.error("OpenAI model requires api_key_env in params")
+            return False
+        if "model_name" not in model["params"]:
+            logger.error("OpenAI model requires model_name in params")
+            return False
+    elif model["type"] == "openrouter":
+        if "api_key_env" not in model["params"]:
+            logger.error("OpenRouter model requires api_key_env in params")
+            return False
+        if "model_name" not in model["params"]:
+            logger.error("OpenRouter model requires model_name in params")
+            return False
+            
+    return True
 
 def validate_tool(tool: Dict[str, Any]) -> bool:
     """验证工具配置"""
     required_fields = ["name", "description", "class_name", "module"]
-    return all(field in tool for field in required_fields)
+    
+    # 基本字段验证
+    if not all(field in tool for field in required_fields):
+        missing_fields = [field for field in required_fields if field not in tool]
+        logger.error(f"Missing required fields in tool config: {missing_fields}")
+        return False
+        
+    # 类型验证
+    if not isinstance(tool["name"], str):
+        logger.error("name must be a string")
+        return False
+    if not isinstance(tool["description"], str):
+        logger.error("description must be a string")
+        return False
+    if not isinstance(tool["class_name"], str):
+        logger.error("class_name must be a string")
+        return False
+    if not isinstance(tool["module"], str):
+        logger.error("module must be a string")
+        return False
+        
+    # 模块路径验证
+    if not tool["module"].startswith("app."):
+        logger.error("module path must start with 'app.'")
+        return False
+        
+    return True
 
 def validate_config(config: Dict[str, Any]) -> List[str]:
+    """验证配置"""
     if not config:
         return ["配置为空"]
         
@@ -45,14 +147,27 @@ def validate_config(config: Dict[str, Any]) -> List[str]:
         tool_names.add(tool["name"])
     
     # 验证模型配置
+    model_ids = set()
     for model in config.get("models", []):
         if not validate_model(model):
             errors.append(f"模型配置无效: {model.get('model_id', 'unknown')}")
+        if model["model_id"] in model_ids:
+            errors.append(f"重复的模型ID: {model['model_id']}")
+        model_ids.add(model["model_id"])
     
     # 验证工作流配置
+    workflow_ids = set()
     for workflow in config.get("workflows", []):
         if not validate_workflow(workflow):
             errors.append(f"工作流配置无效: {workflow.get('workflow_id', 'unknown')}")
+        if workflow["workflow_id"] in workflow_ids:
+            errors.append(f"重复的工作流ID: {workflow['workflow_id']}")
+        workflow_ids.add(workflow["workflow_id"])
+        
+        # 验证工作流中引用的模型是否存在
+        for step in workflow["steps"]:
+            if step["type"] == "llm" and step["model"] not in model_ids:
+                errors.append(f"工作流 {workflow['workflow_id']} 引用了不存在的模型: {step['model']}")
     
     return errors
 

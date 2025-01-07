@@ -19,7 +19,7 @@ steps:
   - type: llm
     id: initial_summary
     description: "生成初始总结"
-    model: openrouter-deepseek
+    model: deepseek-chat
     prompt_template: |
       请总结以下文章的主要内容:
       
@@ -39,7 +39,7 @@ steps:
   - type: llm
     id: optimized_summary
     description: "优化总结"
-    model: openrouter-deepseek
+    model: deepseek-chat
     prompt_template: |
       请对以下总结进行改进和优化：
       

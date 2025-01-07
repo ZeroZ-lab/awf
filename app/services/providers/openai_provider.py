@@ -1,32 +1,61 @@
 import os
-from openai import OpenAI
-from typing import Dict, Any
+from typing import Dict, Any, Optional
 from .base import BaseProvider
+from app.models.agents import ModelConfig
+from openai import AsyncOpenAI
+import logging
+
+logger = logging.getLogger(__name__)
 
 class OpenAIProvider(BaseProvider):
-    def __init__(self, config):
+    def __init__(self, config: ModelConfig):
         super().__init__(config)
-        api_key = os.getenv(config.params["api_key_env"])
-        if not api_key:
-            raise ValueError(f"API key not found in environment: {config.params['api_key_env']}")
-        base_url = os.getenv("OPENAI_BASE_URL", "https://api.openai.com/v1")
-        self.client = OpenAI(api_key=api_key, base_url=base_url)
-        self.model_name = config.params["model_name"]
-
-    def generate_text(self, prompt: str, **kwargs) -> str:
+        self.api_key = os.getenv(config.params.get("api_key_env", "OPENAI_API_KEY"))
+        self.model_name = config.params.get("model_name")
+        self.client = AsyncOpenAI(api_key=self.api_key)
+        
+    async def validate_config(self) -> bool:
+        """验证配置是否有效"""
+        if not self.api_key:
+            logger.error("OpenAI API key not found")
+            return False
+        if not self.model_name:
+            logger.error("Model name not specified")
+            return False
+        return True
+        
+    async def generate_text(self, prompt: str, **kwargs) -> str:
+        """生成文本"""
+        if not await self.validate_config():
+            raise ValueError("Invalid configuration")
+            
         try:
-            response = self.client.completions.create(
-                model=self.model_name,
-                prompt=prompt,
-                max_tokens=kwargs.get("max_tokens", 1000),
-                temperature=kwargs.get("temperature", 0.7),
-                **{k:v for k,v in kwargs.items() if k not in ["max_tokens", "temperature"]}
-            )
-            return response.choices[0].text.strip()
+            # 对于 instruct 模型使用 completions API
+            if "instruct" in self.model_name:
+                response = await self.client.completions.create(
+                    model=self.model_name,
+                    prompt=prompt,
+                    **kwargs
+                )
+                return response.choices[0].text.strip()
+            
+            # 对于 chat 模型使用 chat completions API
+            else:
+                response = await self.client.chat.completions.create(
+                    model=self.model_name,
+                    messages=[{"role": "user", "content": prompt}],
+                    **kwargs
+                )
+                return response.choices[0].message.content
+                
         except Exception as e:
-            print(f"OpenAI API error: {e}")
-            return f"Error generating text with OpenAI: {str(e)}"
-
-    def validate_config(self) -> bool:
-        required_params = ["api_key_env", "model_name"]
-        return all(param in self.config.params for param in required_params) 
+            logger.error(f"Error generating text: {str(e)}")
+            raise ValueError(f"Failed to generate text: {str(e)}")
+    
+    async def get_model_info(self) -> Dict[str, Any]:
+        """获取模型信息"""
+        return {
+            "provider": "openai",
+            "model_name": self.model_name,
+            "capabilities": ["text-generation", "chat"] if "instruct" not in self.model_name else ["text-generation"]
+        } 

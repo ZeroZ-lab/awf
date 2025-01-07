@@ -321,12 +321,13 @@ class WorkflowExecutor:
         # 处理 LLM 步骤
         elif step_type == "llm":
             model_id = step.get("model")
+            logger.info(f"Getting model fff: {model_id}")
             if not model_id:
                 raise ValueError("Model ID is required")
             
-            model = models.get_model(model_id)
+            model = await models.get_model(model_id)
             if not model:
-                raise ValueError(f"Model not found: {model_id}")
+                raise ValueError(f"Model not found 4: {model_id}")
             
             # 创建模板上下文
             context = {
@@ -364,6 +365,33 @@ class WorkflowExecutor:
                 logger.info(f"Step {step_id} - Saved result with id: {step['id']}")
             
             return result
+            
+        # 处理并行步骤
+        elif step_type == "parallel":
+            # 创建上下文
+            context = {
+                "input_text": input_text,
+                "parameters": self.context.get("parameters", {}),
+                "outputs": {
+                    result["id"]: result["output"]
+                    for result in self.context["steps_results"]
+                    if "id" in result
+                }
+            }
+            
+            # 执行并行步骤
+            results = await self.parallel_executor.execute(step, input_text, context)
+            
+            # 如果步骤有ID，保存结果
+            if "id" in step:
+                self.context["steps_results"].append({
+                    "id": step["id"],
+                    "output": results
+                })
+                logger.info(f"Step {step_id} - Saved parallel results with id: {step['id']}")
+            
+            # 返回结果列表的最后一个结果作为输出
+            return results[-1] if results else input_text
             
         else:
             raise ValueError(f"Unknown step type: {step_type}")

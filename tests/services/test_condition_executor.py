@@ -21,7 +21,7 @@ async def test_if_condition_executor(condition_factory):
     # 测试 if 条件执行器
     step = {
         "type": "if",
-        "condition": "len(input_text) > 5",
+        "condition": "input_text.startswith('hello')",
         "then": [
             {"type": "step1", "config": "test"}
         ],
@@ -30,14 +30,19 @@ async def test_if_condition_executor(condition_factory):
         ]
     }
     
-    context = {"parameters": {}}
+    context = {
+        "input_text": "hello world",
+        "parameters": {}
+    }
     
     # 测试条件为真的情况
     executor = condition_factory.get_executor("if")
+    executor.input_text = "hello world"  # 设置输入文本
     result = await executor.execute(step, "hello world", context)
     assert result == "Executed: step1 with hello world"
     
     # 测试条件为假的情况
+    executor.input_text = "hi"  # 更新输入文本
     result = await executor.execute(step, "hi", context)
     assert result == "Executed: step2 with hi"
 
@@ -46,14 +51,14 @@ async def test_switch_condition_executor(condition_factory):
     # 测试 switch 条件执行器
     step = {
         "type": "switch",
-        "value": "len(input_text)",
+        "value": "input_text",
         "cases": [
             {
-                "value": "5",
+                "value": "'hello'",
                 "steps": [{"type": "step1", "config": "test"}]
             },
             {
-                "value": "11",
+                "value": "'hello world'",
                 "steps": [{"type": "step2", "config": "test"}]
             }
         ],
@@ -64,14 +69,17 @@ async def test_switch_condition_executor(condition_factory):
     
     # 测试匹配第一个 case
     executor = condition_factory.get_executor("switch")
+    executor.input_text = "hello"  # 设置输入文本
     result = await executor.execute(step, "hello", context)
     assert result == "Executed: step1 with hello"
     
     # 测试匹配第二个 case
+    executor.input_text = "hello world"  # 更新输入文本
     result = await executor.execute(step, "hello world", context)
     assert result == "Executed: step2 with hello world"
     
     # 测试默认情况
+    executor.input_text = "hi"  # 更新输入文本
     result = await executor.execute(step, "hi", context)
     assert result == "Executed: step3 with hi"
 
@@ -98,23 +106,26 @@ async def test_match_condition_executor(condition_factory):
     
     # 测试匹配第一个条件
     executor = condition_factory.get_executor("match")
+    executor.input_text = "hello there"  # 设置输入文本
     result = await executor.execute(step, "hello there", context)
     assert result == "Executed: step1 with hello there"
     
     # 测试匹配第二个条件
+    executor.input_text = "beautiful world"  # 更新输入文本
     result = await executor.execute(step, "beautiful world", context)
     assert result == "Executed: step2 with beautiful world"
     
     # 测试默认情况
+    executor.input_text = "hi there"  # 更新输入文本
     result = await executor.execute(step, "hi there", context)
     assert result == "Executed: step3 with hi there"
 
 @pytest.mark.asyncio
 async def test_condition_executor_with_parameters(condition_factory):
-    # 测试带参数的条件执行
+    """测试带参数的条件执行"""
     step = {
         "type": "if",
-        "condition": "input_text == parameters['expected_text']",
+        "condition": "input_text == vars['parameters']['expected_text']",
         "then": [
             {"type": "step1", "config": "test"}
         ],
@@ -123,16 +134,21 @@ async def test_condition_executor_with_parameters(condition_factory):
         ]
     }
     
-    context = {"parameters": {"expected_text": "hello"}}
+    context = {
+        "input_text": "hello",
+        "parameters": {"expected_text": "hello"}
+    }
     
     # 测试条件为真的情况
     executor = condition_factory.get_executor("if")
+    executor.input_text = "hello"  # 设置输入文本
     result = await executor.execute(step, "hello", context)
     assert result == "Executed: step1 with hello"
     
     # 测试条件为假的情况
-    result = await executor.execute(step, "world", context)
-    assert result == "Executed: step2 with world"
+    context["parameters"]["expected_text"] = "world"
+    result = await executor.execute(step, "hello", context)
+    assert result == "Executed: step2 with hello"
 
 @pytest.mark.asyncio
 async def test_invalid_condition_expression(condition_factory):

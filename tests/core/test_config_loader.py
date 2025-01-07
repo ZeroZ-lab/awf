@@ -57,12 +57,13 @@ def test_resolve_path(config_loader):
     # 测试相对路径
     relative_path = "models/test.yaml"
     resolved_path = config_loader._resolve_path(relative_path)
-    assert resolved_path == os.path.join(config_loader.base_dir, relative_path)
+    expected_path = os.path.normpath(os.path.join(config_loader.base_dir, relative_path))
+    assert resolved_path == expected_path
     
     # 测试绝对路径
-    absolute_path = "/absolute/path/test.yaml"
+    absolute_path = os.path.abspath("/absolute/path/test.yaml")
     resolved_path = config_loader._resolve_path(absolute_path)
-    assert resolved_path == absolute_path
+    assert resolved_path == os.path.normpath(absolute_path)
 
 def test_load_yaml(config_loader, test_configs):
     """测试 YAML 文件加载"""
@@ -93,7 +94,8 @@ def test_merge_configs(config_loader):
             "tools": [
                 {"name": "tool1"}
             ]
-        }
+        },
+        None  # 测试空配置的处理
     ]
     
     merged = config_loader._merge_configs(configs)
@@ -101,6 +103,9 @@ def test_merge_configs(config_loader):
     assert len(merged["models"]) == 3
     assert "tools" in merged
     assert len(merged["tools"]) == 1
+    
+    # 测试空列表
+    assert config_loader._merge_configs([]) == {"models": [], "tools": []}
 
 def test_load_config_with_includes(config_loader, test_configs):
     """测试带 includes 的配置加载"""

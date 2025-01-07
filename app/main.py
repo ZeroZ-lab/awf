@@ -1,21 +1,17 @@
 from fastapi import FastAPI
 from app.api.v1 import workflows
-from dotenv import load_dotenv
+from app.services.model_manager import models
+import logging
 
-# 加载环境变量
-load_dotenv()
+logger = logging.getLogger(__name__)
 
-# 创建 FastAPI 应用
-app = FastAPI(
-    title="AI Workflow Service",
-    description="AI 工作流编排服务",
-    version="1.0.0"
-)
+app = FastAPI(title="AI Workflow Framework")
 
-# 注册路由
-app.include_router(workflows.router)
+@app.on_event("startup")
+async def startup_event():
+    """应用启动时的初始化"""
+    logger.info("Initializing model manager...")
+    await models.initialize()
+    logger.info("Model manager initialized")
 
-# 健康检查端点
-@app.get("/health")
-async def health_check():
-    return {"status": "healthy"} 
+app.include_router(workflows.router, prefix="/api/v1", tags=["workflows"]) 
