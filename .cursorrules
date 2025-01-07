@@ -7,6 +7,29 @@ principles:
   - 优先考虑代码质量和最佳实践
   - 保持代码的可维护性和可扩展性
   - 确保文档、测试和代码的一致性
+  - 遵循"文档先行"原则，确保变更的可追踪性
+  - 参考 examples/workflow_examples.yaml 中的示例编写工作流配置
+
+modification_order:
+  - 步骤顺序：
+    1. 首先更新 README 和相关文档
+    2. 然后编写或更新测试用例
+    3. 最后实现或修改代码
+  - 原则说明：
+    - 文档优先确保需求和设计的清晰理解
+    - 测试驱动开发(TDD)保证代码质量
+    - 代码实现基于文档和测试的指导
+    - YAML 配置参考 examples/workflow_examples.yaml 中的示例
+  - 检查清单：
+    - README 是否反映了最新变更
+    - 测试用例是否覆盖新功能
+    - 代码实现是否符合文档规范
+    - YAML 配置是否遵循示例规范
+    - examples/workflow_examples.yaml 是否同步更新：
+      - 新增工作流时添加相应示例
+      - 修改工作流时更新对应示例
+      - 删除工作流时移除相关示例
+      - 确保示例的注释和说明保持最新
 
 expertise:
   - Python/FastAPI 开发

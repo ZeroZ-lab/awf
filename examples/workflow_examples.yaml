@@ -1,0 +1,195 @@
+# 基础 LLM 工作流示例
+basic_llm_workflow:
+  workflow_id: basic_llm_workflow
+  name: 基础 LLM 工作流
+  description: 演示基本的 LLM 调用功能
+  version: "1.0"
+  
+  parameters:
+    temperature:
+      type: float
+      default: 0.7
+      required: false
+      description: "生成文本的随机性程度"
+    max_tokens:
+      type: integer
+      default: 1000
+      required: false
+      description: "生成文本的最大长度"
+    language:
+      type: string
+      default: "zh"
+      required: false
+      description: "输出语言"
+  
+  steps:
+    - type: llm
+      id: generate_content
+      description: "生成内容"
+      model: openai-gpt-3.5-turbo-instruct
+      prompt_template: |
+        请用$param(language)语言生成一段关于{input_text}的描述。
+      temperature: $param(temperature)
+      max_tokens: $param(max_tokens)
+
+# 条件分支工作流示例
+conditional_workflow:
+  workflow_id: conditional_workflow
+  name: 条件分支工作流
+  description: 演示条件判断和分支执行功能
+  version: "1.0"
+  
+  parameters:
+    threshold:
+      type: integer
+      default: 100
+      required: false
+      description: "字数阈值"
+  
+  steps:
+    - type: llm
+      id: initial_content
+      description: "生成初始内容"
+      model: openai-gpt-3.5-turbo-instruct
+      prompt_template: |
+        请生成一段关于{input_text}的描述。
+      temperature: 0.7
+      max_tokens: 500
+    
+    - type: if
+      description: "根据内容长度判断"
+      condition: "$length(initial_content) > $param(threshold)"
+      then:
+        - type: llm
+          id: summarize
+          description: "内容过长，生成摘要"
+          model: openai-gpt-3.5-turbo-instruct
+          prompt_template: |
+            请对以下内容生成一个简短的摘要：
+            $output(initial_content)
+      else:
+        - type: llm
+          id: expand
+          description: "内容过短，扩展内容"
+          model: openai-gpt-3.5-turbo-instruct
+          prompt_template: |
+            请对以下内容进行扩展和补充：
+            $output(initial_content)
+
+# 并行处理工作流示例
+parallel_workflow:
+  workflow_id: parallel_workflow
+  name: 并行处理工作流
+  description: 演示并行执行功能
+  version: "1.0"
+  
+  parameters:
+    style:
+      type: string
+      default: "professional"
+      required: false
+      description: "输出风格"
+    max_length:
+      type: integer
+      default: 500
+      required: false
+      description: "每部分最大长度"
+  
+  steps:
+    - type: llm
+      id: initial_content
+      description: "生成初始内容"
+      model: openai-gpt-3.5-turbo-instruct
+      prompt_template: |
+        请生成一篇关于{input_text}的文章，包含以下几个方面：
+        1. 背景介绍
+        2. 主要特点
+        3. 应用场景
+        4. 未来展望
+      temperature: 0.7
+      max_tokens: 1000
+    
+    - type: parallel
+      id: parallel_processing
+      description: "并行优化各个部分"
+      steps:
+        - type: llm
+          id: background_part
+          description: "优化背景介绍"
+          model: openai-gpt-3.5-turbo-instruct
+          prompt_template: |
+            请优化以下文章中的背景介绍部分，使用$param(style)的风格：
+            $output(initial_content)
+          max_tokens: $param(max_length)
+        
+        - type: llm
+          id: features_part
+          description: "优化主要特点"
+          model: openai-gpt-3.5-turbo-instruct
+          prompt_template: |
+            请优化以下文章中的主要特点部分，使用$param(style)的风格：
+            $output(initial_content)
+          max_tokens: $param(max_length)
+        
+        - type: llm
+          id: applications_part
+          description: "优化应用场景"
+          model: openai-gpt-3.5-turbo-instruct
+          prompt_template: |
+            请优化以下文章中的应用场景部分，使用$param(style)的风格：
+            $output(initial_content)
+          max_tokens: $param(max_length)
+        
+        - type: llm
+          id: future_part
+          description: "优化未来展望"
+          model: openai-gpt-3.5-turbo-instruct
+          prompt_template: |
+            请优化以下文章中的未来展望部分，使用$param(style)的风格：
+            $output(initial_content)
+          max_tokens: $param(max_length)
+    
+    - type: llm
+      id: final_content
+      description: "整合优化后的内容"
+      model: openai-gpt-3.5-turbo-instruct
+      prompt_template: |
+        请将以下各部分内容整合成一篇连贯的文章：
+        
+        背景介绍：
+        $output(background_part)
+        
+        主要特点：
+        $output(features_part)
+        
+        应用场景：
+        $output(applications_part)
+        
+        未来展望：
+        $output(future_part)
+      temperature: 0.4
+      max_tokens: 2000
+
+# 注释说明
+# 1. workflow_id: 工作流唯一标识符
+# 2. parameters: 工作流参数配置
+#    - type: 参数类型 (string/integer/float/boolean)
+#    - default: 默认值
+#    - required: 是否必需
+#    - description: 参数说明
+# 3. steps: 工作流步骤
+#    - type: 步骤类型 (llm/if/parallel)
+#    - id: 步骤标识符（用于引用结果）
+#    - description: 步骤说明
+#    - model: 使用的模型
+#    - prompt_template: 提示模板
+#      - 支持 $param() 引用参数
+#      - 支持 $output() 引用其他步骤的输出
+#      - 支持 $length() 获取文本长度
+# 4. 条件判断：
+#    - condition: 条件表达式
+#    - then: 条件为真时执行的步骤
+#    - else: 条件为假时执行的步骤
+# 5. 并行处理：
+#    - steps: 并行执行的步骤列表
+#    - 所有步骤完成后才会继续执行后续步骤 
